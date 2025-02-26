@@ -107,6 +107,8 @@ const currentEnabledKnowledge = (s: AgentStore) => {
   ] as KnowledgeItem[];
 };
 
+const agentSearchMode = (s: AgentStore) => currentAgentChatConfig(s).searchMode || 'off';
+
 const hasSystemRole = (s: AgentStore) => {
   const config = currentAgentConfig(s);
 
@@ -138,7 +140,12 @@ const currentKnowledgeIds = (s: AgentStore) => {
   };
 };
 
+const isAgentConfigLoading = (s: AgentStore) => !s.agentConfigInitMap[s.activeId];
+
+const isAgentEnableSearch = (s: AgentStore) => agentSearchMode(s) !== 'off';
+
 export const agentSelectors = {
+  agentSearchMode,
   currentAgentChatConfig,
   currentAgentConfig,
   currentAgentFiles,
@@ -157,5 +164,7 @@ export const agentSelectors = {
   hasSystemRole,
   inboxAgentConfig,
   inboxAgentModel,
+  isAgentConfigLoading,
+  isAgentEnableSearch,
   isInboxSession,
 };

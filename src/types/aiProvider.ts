@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { AiModelConfig, AiModelType, ModelAbilities } from '@/types/aiModel';
+import { AiModelForSelect, EnabledAiModel, ModelSearchImplementType } from '@/types/aiModel';
 import { SmoothingParams } from '@/types/llm';
 
 export const AiProviderSourceEnum = {
@@ -16,13 +16,18 @@ export type AiProviderSourceType = (typeof AiProviderSourceEnum)[keyof typeof Ai
 export const AiProviderSDKEnum = {
   Anthropic: 'anthropic',
   Azure: 'azure',
+  AzureAI: 'azureai',
   Bedrock: 'bedrock',
   Cloudflare: 'cloudflare',
+  /**
+   * @deprecated
+   */
   Doubao: 'doubao',
   Google: 'google',
   Huggingface: 'huggingface',
   Ollama: 'ollama',
   Openai: 'openai',
+  Volcengine: 'volcengine',
 } as const;
 
 export type AiProviderSDKType = (typeof AiProviderSDKEnum)[keyof typeof AiProviderSDKEnum];
@@ -72,6 +77,13 @@ export interface AiProviderSettings {
    * @default false
    */
   disableBrowserRequest?: boolean;
+  /**
+   * whether provider support edit model
+   *
+   * @default true
+   */
+  modelEditable?: boolean;
+
   proxyUrl?:
     | {
         desc?: string;
@@ -84,7 +96,7 @@ export interface AiProviderSettings {
    * default openai
    */
   sdkType?: AiProviderSDKType;
-
+  searchMode?: ModelSearchImplementType;
   showAddNewModel?: boolean;
   /**
    * whether show api key in the provider config
@@ -188,16 +200,12 @@ export interface EnabledProvider {
   source: AiProviderSourceType;
 }
 
-export interface EnabledAiModel {
-  abilities: ModelAbilities;
-  config?: AiModelConfig;
-  contextWindowTokens?: number;
-  displayName?: string;
-  enabled?: boolean;
+export interface EnabledProviderWithModels {
+  children: AiModelForSelect[];
   id: string;
-  providerId: string;
-  sort?: number;
-  type: AiModelType;
+  logo?: string;
+  name: string;
+  source: AiProviderSourceType;
 }
 
 export interface AiProviderRuntimeConfig {

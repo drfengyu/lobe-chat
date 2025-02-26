@@ -13,7 +13,6 @@ import { buildAnthropicMessages, buildAnthropicTools } from '../utils/anthropicH
 import { StreamingResponse } from '../utils/response';
 import { AnthropicStream } from '../utils/streams';
 
-import { LOBE_DEFAULT_MODEL_LIST } from '@/config/aiModels';
 import type { ChatModelCard } from '@/types/llm';
 
 export interface AnthropicModelCard {
@@ -98,12 +97,29 @@ export class LobeAnthropicAI implements LobeRuntimeAI {
   }
 
   private async buildAnthropicPayload(payload: ChatStreamPayload) {
-    const { messages, model, max_tokens = 4096, temperature, top_p, tools } = payload;
+    const { messages, model, max_tokens, temperature, top_p, tools, thinking } = payload;
     const system_message = messages.find((m) => m.role === 'system');
     const user_messages = messages.filter((m) => m.role !== 'system');
 
+    if (!!thinking) {
+      const maxTokens =
+        max_tokens ?? (thinking?.budget_tokens ? thinking?.budget_tokens + 4096 : 4096);
+
+      // `temperature` may only be set to 1 when thinking is enabled.
+      // `top_p` must be unset when thinking is enabled.
+      return {
+        max_tokens: maxTokens,
+        messages: await buildAnthropicMessages(user_messages),
+        model,
+        system: system_message?.content as string,
+
+        thinking,
+        tools: buildAnthropicTools(tools),
+      } satisfies Anthropic.MessageCreateParams;
+    }
+
     return {
-      max_tokens,
+      max_tokens: max_tokens ?? 4096,
       messages: await buildAnthropicMessages(user_messages),
       model,
       system: system_message?.content as string,
@@ -114,6 +130,8 @@ export class LobeAnthropicAI implements LobeRuntimeAI {
   }
 
   async models() {
+    const { LOBE_DEFAULT_MODEL_LIST } = await import('@/config/aiModels');
+
     const url = `${this.baseURL}/v1/models`;
     const response = await fetch(url, {
       headers: {
@@ -123,18 +141,30 @@ export class LobeAnthropicAI implements LobeRuntimeAI {
       method: 'GET',
     });
     const json = await response.json();
-  
+
     const modelList: AnthropicModelCard[] = json['data'];
-  
+
     return modelList
       .map((model) => {
+        const knownModel = LOBE_DEFAULT_MODEL_LIST.find(
+          (m) => model.id.toLowerCase() === m.id.toLowerCase(),
+        );
+
         return {
-          contextWindowTokens: LOBE_DEFAULT_MODEL_LIST.find((m) => model.id === m.id)?.contextWindowTokens ?? undefined,
+          contextWindowTokens: knownModel?.contextWindowTokens ?? undefined,
           displayName: model.display_name,
-          enabled: LOBE_DEFAULT_MODEL_LIST.find((m) => model.id === m.id)?.enabled || false,
-          functionCall: model.id.toLowerCase().includes('claude-3'),
+          enabled: knownModel?.enabled || false,
+          functionCall:
+            model.id.toLowerCase().includes('claude-3') ||
+            knownModel?.abilities?.functionCall ||
+            false,
           id: model.id,
-          vision: model.id.toLowerCase().includes('claude-3') && !model.id.toLowerCase().includes('claude-3-5-haiku'),
+          reasoning: knownModel?.abilities?.reasoning || false,
+          vision:
+            (model.id.toLowerCase().includes('claude-3') &&
+              !model.id.toLowerCase().includes('claude-3-5-haiku')) ||
+            knownModel?.abilities?.vision ||
+            false,
         };
       })
       .filter(Boolean) as ChatModelCard[];
