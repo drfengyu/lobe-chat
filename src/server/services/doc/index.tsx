@@ -1,6 +1,7 @@
-import matter from 'gray-matter';
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync,readFileSync } from 'node:fs';
 import { join } from 'node:path';
+
+import matter from 'gray-matter';
 
 const LAST_MODIFIED = new Date().toISOString();
 
@@ -35,6 +36,6 @@ export class DocService {
   }
 }
 
-// 很奇怪，需要加一行这个 `readdirSync` 才能在 vercel 部署后读到 md 文件
-// 否则没法正常找到 mdx 文件
+// Strangely, this `readdirSync` call is needed to read md files after Vercel deployment
+// Otherwise, mdx files cannot be found properly
 readdirSync(join(process.cwd(), 'docs'));

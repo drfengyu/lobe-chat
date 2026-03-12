@@ -1,7 +1,8 @@
-import { headers } from 'next/headers';
 import { createHmac } from 'node:crypto';
 
-import { authEnv } from '@/config/auth';
+import { headers } from 'next/headers';
+
+import { authEnv } from '@/envs/auth';
 
 export type LogtToUserEntity = {
   applicationId?: string;
@@ -42,7 +43,7 @@ export const validateRequest = async (request: Request, signingKey: string) => {
     }
   } catch (e) {
     if (!authEnv.LOGTO_WEBHOOK_SIGNING_KEY) {
-      throw new Error('`LOGTO_WEBHOOK_SIGNING_KEY` environment variable is missing.');
+      throw new Error('`LOGTO_WEBHOOK_SIGNING_KEY` environment variable is missing.', { cause: e });
     }
     console.error('[logto]: incoming webhook failed in verification.\n', e);
     return;

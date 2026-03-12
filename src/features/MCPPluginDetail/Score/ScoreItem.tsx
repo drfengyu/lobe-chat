@@ -1,10 +1,10 @@
-import { Icon } from '@lobehub/ui';
-import { useTheme } from 'antd-style';
+import { Flexbox, Icon } from '@lobehub/ui';
+import { cssVar } from 'antd-style';
 import { BanIcon, CircleCheckBigIcon, CircleDashedIcon } from 'lucide-react';
-import { ReactNode, memo } from 'react';
-import { Flexbox } from 'react-layout-kit';
+import { type ReactNode } from 'react';
+import { memo } from 'react';
 
-import Title from '../../../app/[variants]/(main)/discover/features/Title';
+import Title from '@/routes/(main)/community/features/Title';
 
 export interface ScoreItemProps {
   check: boolean;
@@ -15,17 +15,18 @@ export interface ScoreItemProps {
 }
 
 const ScoreItem = memo<ScoreItemProps>(({ required, check, desc, title }) => {
-  const theme = useTheme();
   return (
-    <Flexbox align={'center'} gap={16} horizontal paddingInline={16}>
+    <Flexbox horizontal align={'center'} gap={16} paddingInline={16}>
       <Icon
-        color={check ? theme.colorSuccess : required ? theme.colorError : theme.colorTextQuaternary}
         icon={check ? CircleCheckBigIcon : required ? BanIcon : CircleDashedIcon}
         size={24}
+        color={
+          check ? cssVar.colorSuccess : required ? cssVar.colorError : cssVar.colorTextQuaternary
+        }
       />
       <Flexbox gap={4}>
         <Title level={3}>{title}</Title>
-        <p style={{ color: theme.colorTextSecondary, margin: 0 }}>{desc}</p>
+        <p style={{ color: cssVar.colorTextSecondary, margin: 0 }}>{desc}</p>
       </Flexbox>
     </Flexbox>
   );

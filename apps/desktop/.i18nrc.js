@@ -1,14 +1,14 @@
 const { defineConfig } = require('@lobehub/i18n-cli');
 
 module.exports = defineConfig({
-  entry: 'resources/locales/zh-CN',
-  entryLocale: 'zh-CN',
+  entry: 'resources/locales/en',
+  entryLocale: 'en',
   output: 'resources/locales',
   outputLocales: [
     'ar',
     'bg-BG',
     'zh-TW',
-    'en-US',
+    'zh-CN',
     'ru-RU',
     'ja-JP',
     'ko-KR',
@@ -23,8 +23,9 @@ module.exports = defineConfig({
     'vi-VN',
     'fa-IR',
   ],
+  saveImmediately: true,
   temperature: 0,
-  modelName: 'gpt-4o-mini',
+  modelName: 'gpt-4.1-mini',
   experimental: {
     jsonMode: true,
   },

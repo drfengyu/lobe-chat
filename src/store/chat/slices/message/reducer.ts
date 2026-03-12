@@ -1,19 +1,26 @@
+import {
+  type ChatMessageExtra,
+  type ChatPluginPayload,
+  type ChatToolPayload,
+  type CreateMessageParams,
+  type MessagePluginItem,
+  type UIChatMessage,
+} from '@lobechat/types';
 import isEqual from 'fast-deep-equal';
+import i18n from 'i18next';
 import { produce } from 'immer';
 
-import {
-  ChatMessage,
-  ChatMessageExtra,
-  ChatPluginPayload,
-  ChatToolPayload,
-  CreateMessageParams,
-} from '@/types/message';
 import { merge } from '@/utils/merge';
 
 interface UpdateMessages {
+  type: 'updateMessages';
+  value: UIChatMessage[];
+}
+
+interface UpdateMessage {
   id: string;
   type: 'updateMessage';
-  value: Partial<ChatMessage>;
+  value: Partial<UIChatMessage>;
 }
 
 interface CreateMessage {
@@ -42,7 +49,7 @@ interface UpdatePluginState {
 interface UpdateMessagePlugin {
   id: string;
   type: 'updateMessagePlugin';
-  value: Partial<ChatPluginPayload>;
+  value: Partial<MessagePluginItem>;
 }
 
 interface UpdateMessageTools {
@@ -70,11 +77,19 @@ interface UpdateMessageExtra {
   value: any;
 }
 
+interface UpdateMessageMetadata {
+  id: string;
+  type: 'updateMessageMetadata';
+  value: Partial<UIChatMessage['metadata']>;
+}
+
 export type MessageDispatch =
   | CreateMessage
+  | UpdateMessage
   | UpdateMessages
   | UpdatePluginState
   | UpdateMessageExtra
+  | UpdateMessageMetadata
   | DeleteMessage
   | UpdateMessagePlugin
   | UpdateMessageTools
@@ -82,15 +97,19 @@ export type MessageDispatch =
   | DeleteMessageTool
   | DeleteMessages;
 
-export const messagesReducer = (state: ChatMessage[], payload: MessageDispatch): ChatMessage[] => {
+export const messagesReducer = (
+  state: UIChatMessage[],
+  payload: MessageDispatch,
+): UIChatMessage[] => {
   switch (payload.type) {
     case 'updateMessage': {
       return produce(state, (draftState) => {
         const { id, value } = payload;
-        const index = draftState.findIndex((i) => i.id === id);
-        if (index < 0) return;
 
-        draftState[index] = merge(draftState[index], { ...value, updatedAt: Date.now() });
+        const index = draftState.findIndex((i) => i.id === id);
+        if (index >= 0) {
+          draftState[index] = merge(draftState[index], { ...value, updatedAt: Date.now() });
+        }
       });
     }
 
@@ -106,6 +125,17 @@ export const messagesReducer = (state: ChatMessage[], payload: MessageDispatch):
           message.extra[key as keyof ChatMessageExtra] = value;
         }
 
+        message.updatedAt = Date.now();
+      });
+    }
+
+    case 'updateMessageMetadata': {
+      return produce(state, (draftState) => {
+        const { id, value } = payload;
+        const message = draftState.find((i) => i.id === id);
+        if (!message) return;
+
+        message.metadata = merge(message.metadata, value);
         message.updatedAt = Date.now();
       });
     }
@@ -191,9 +221,14 @@ export const messagesReducer = (state: ChatMessage[], payload: MessageDispatch):
       return produce(state, (draftState) => {
         const { value, id } = payload;
 
-        draftState.push({ ...value, createdAt: Date.now(), id, meta: {}, updatedAt: Date.now() });
+        draftState.push({ ...value, createdAt: Date.now(), id, updatedAt: Date.now() });
       });
     }
+
+    case 'updateMessages': {
+      return payload.value;
+    }
+
     case 'deleteMessage': {
       return produce(state, (draft) => {
         const { id } = payload;
@@ -212,8 +247,9 @@ export const messagesReducer = (state: ChatMessage[], payload: MessageDispatch):
         });
       });
     }
+
     default: {
-      throw new Error('暂未实现的 type，请检查 reducer');
+      throw new Error(i18n.t('errors.unimplementedType', { ns: 'common' }));
     }
   }
 };

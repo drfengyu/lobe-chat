@@ -1,8 +1,13 @@
 'use client';
 
+import {
+  type GoogleAnalyticsProviderConfig,
+  type PostHogProviderAnalyticsConfig,
+} from '@lobehub/analytics';
 import { createSingletonAnalytics } from '@lobehub/analytics';
 import { AnalyticsProvider } from '@lobehub/analytics/react';
-import { ReactNode, memo, useMemo } from 'react';
+import { type ReactNode } from 'react';
+import { memo, useMemo } from 'react';
 
 import { BUSINESS_LINE } from '@/const/analytics';
 import { isDesktop } from '@/const/version';
@@ -10,16 +15,14 @@ import { isDev } from '@/utils/env';
 
 type Props = {
   children: ReactNode;
-  debugPosthog: boolean;
-  posthogEnabled: boolean;
-  posthogHost: string;
-  posthogToken: string;
+  ga4Config: GoogleAnalyticsProviderConfig;
+  postHogConfig: PostHogProviderAnalyticsConfig;
 };
 
 let analyticsInstance: ReturnType<typeof createSingletonAnalytics> | null = null;
 
 export const LobeAnalyticsProvider = memo(
-  ({ children, posthogHost, posthogToken, posthogEnabled, debugPosthog }: Props) => {
+  ({ children, ga4Config, postHogConfig }: Props) => {
     const analytics = useMemo(() => {
       if (analyticsInstance) {
         return analyticsInstance;
@@ -29,13 +32,8 @@ export const LobeAnalyticsProvider = memo(
         business: BUSINESS_LINE,
         debug: isDev,
         providers: {
-          posthog: {
-            debug: debugPosthog,
-            enabled: posthogEnabled,
-            host: posthogHost,
-            key: posthogToken,
-            person_profiles: 'always',
-          },
+          ga4: ga4Config,
+          posthog: postHogConfig,
         },
       });
 

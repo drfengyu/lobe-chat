@@ -1,6 +1,7 @@
 import { NetworkProxySettings } from '@lobechat/electron-client-ipc';
 import { fetch, getGlobalDispatcher, setGlobalDispatcher } from 'undici';
 
+import { appendVercelCookie } from '@/utils/http-headers';
 import { createLogger } from '@/utils/logger';
 
 import { ProxyDispatcherManager } from './dispatcher';
@@ -11,7 +12,7 @@ import { ProxyConfigValidator } from './validator';
 const logger = createLogger('modules:networkProxy:tester');
 
 /**
- * 代理连接测试结果
+ * Proxy connection test result
  */
 export interface ProxyTestResult {
   message?: string;
@@ -20,14 +21,14 @@ export interface ProxyTestResult {
 }
 
 /**
- * 代理连接测试器
+ * Proxy connection tester
  */
 export class ProxyConnectionTester {
-  private static readonly DEFAULT_TIMEOUT = 10_000; // 10秒超时
+  private static readonly DEFAULT_TIMEOUT = 10_000; // 10 seconds timeout
   private static readonly DEFAULT_TEST_URL = 'https://www.google.com';
 
   /**
-   * 测试代理连接
+   * Test proxy connection
    */
   static async testConnection(
     url: string = this.DEFAULT_TEST_URL,
@@ -41,12 +42,9 @@ export class ProxyConnectionTester {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
 
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'LobeChat-Desktop/1.0.0',
-        },
-        signal: controller.signal,
-      });
+      const headers: Record<string, string> = { 'User-Agent': 'LobeChat-Desktop/1.0.0' };
+      appendVercelCookie(headers);
+      const response = await fetch(url, { headers, signal: controller.signal });
 
       clearTimeout(timeoutId);
 
@@ -77,13 +75,13 @@ export class ProxyConnectionTester {
   }
 
   /**
-   * 测试指定代理配置的连接
+   * Test connection with specified proxy configuration
    */
   static async testProxyConfig(
     config: NetworkProxySettings,
     testUrl: string = this.DEFAULT_TEST_URL,
   ): Promise<ProxyTestResult> {
-    // 验证配置
+    // Validate configuration
     const validation = ProxyConfigValidator.validate(config);
     if (!validation.isValid) {
       return {
@@ -92,12 +90,12 @@ export class ProxyConnectionTester {
       };
     }
 
-    // 如果未启用代理，直接测试
+    // If proxy is not enabled, test directly
     if (!config.enableProxy) {
       return this.testConnection(testUrl);
     }
 
-    // 创建临时代理 agent 进行测试
+    // Create temporary proxy agent for testing
     try {
       const proxyUrl = ProxyUrlBuilder.build(config);
       logger.debug(`Testing proxy with URL: ${proxyUrl}`);
@@ -108,16 +106,16 @@ export class ProxyConnectionTester {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), this.DEFAULT_TIMEOUT);
 
-      // 临时设置代理进行测试
+      // Temporarily set proxy for testing
       const originalDispatcher = getGlobalDispatcher();
       setGlobalDispatcher(agent);
 
       try {
+        const testHeaders: Record<string, string> = { 'User-Agent': 'LobeChat-Desktop/1.0.0' };
+        appendVercelCookie(testHeaders);
         const response = await fetch(testUrl, {
           dispatcher: agent,
-          headers: {
-            'User-Agent': 'LobeChat-Desktop/1.0.0',
-          },
+          headers: testHeaders,
           signal: controller.signal,
         });
 
@@ -138,9 +136,9 @@ export class ProxyConnectionTester {
         clearTimeout(timeoutId);
         throw fetchError;
       } finally {
-        // 恢复原来的 dispatcher
+        // Restore original dispatcher
         setGlobalDispatcher(originalDispatcher);
-        // 清理临时创建的代理 agent
+        // Clean up temporary proxy agent
         if (agent && typeof agent.destroy === 'function') {
           try {
             await agent.destroy();

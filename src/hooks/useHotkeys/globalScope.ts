@@ -1,52 +1,21 @@
-import isEqual from 'fast-deep-equal';
-import { parseAsBoolean, useQueryState } from 'nuqs';
-import { useHotkeys } from 'react-hotkeys-hook';
+import { INBOX_SESSION_ID } from '@lobechat/const';
+import { HotkeyEnum } from '@lobechat/types';
 
-import { useSwitchSession } from '@/hooks/useSwitchSession';
+import { useNavigateToAgent } from '@/hooks/useNavigateToAgent';
+import { usePinnedAgentState } from '@/hooks/usePinnedAgentState';
 import { useGlobalStore } from '@/store/global';
-import { featureFlagsSelectors, useServerConfigStore } from '@/store/serverConfig';
-import { useSessionStore } from '@/store/session';
-import { sessionSelectors } from '@/store/session/selectors';
-import { useUserStore } from '@/store/user';
-import { settingsSelectors } from '@/store/user/selectors';
-import { HotkeyEnum, HotkeyScopeEnum, KeyEnum } from '@/types/hotkey';
 
 import { useHotkeyById } from './useHotkeyById';
 
-export const useSwitchAgentHotkey = () => {
-  const { showPinList } = useServerConfigStore(featureFlagsSelectors);
-  const list = useSessionStore(sessionSelectors.pinnedSessions, isEqual);
-  const hotkey = useUserStore(settingsSelectors.getHotkeyById(HotkeyEnum.SwitchAgent));
-  const switchSession = useSwitchSession();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const [_, setPinned] = useQueryState('pinned', parseAsBoolean);
+// Switch to chat tab (and focus on Lobe AI)
+export const useNavigateToChatHotkey = () => {
+  const navigateToAgent = useNavigateToAgent();
+  const [, { unpinAgent }] = usePinnedAgentState();
 
-  const switchAgent = (id: string) => {
-    switchSession(id);
-    setPinned(true);
-  };
-
-  const ref = useHotkeys(
-    list.slice(0, 9).map((e, i) => hotkey.replaceAll(KeyEnum.Number, String(i + 1))),
-    (_, hotkeysEvent) => {
-      if (!hotkeysEvent.keys?.[0]) return;
-      const index = parseInt(hotkeysEvent.keys?.[0]) - 1;
-      const item = list[index];
-      if (!item) return;
-      switchAgent(item.id);
-    },
-    {
-      enableOnFormTags: true,
-      enabled: showPinList,
-      preventDefault: true,
-      scopes: [HotkeyScopeEnum.Global, HotkeyEnum.SwitchAgent],
-    },
-  );
-
-  return {
-    id: HotkeyEnum.SwitchAgent,
-    ref,
-  };
+  return useHotkeyById(HotkeyEnum.NavigateToChat, () => {
+    navigateToAgent(INBOX_SESSION_ID);
+    unpinAgent();
+  });
 };
 
 export const useOpenHotkeyHelperHotkey = () => {
@@ -60,10 +29,39 @@ export const useOpenHotkeyHelperHotkey = () => {
   );
 };
 
-// 注册聚合
+export const useToggleLeftPanelHotkey = () => {
+  const isZenMode = useGlobalStore((s) => s.status.zenMode);
+  const toggleLeftPanel = useGlobalStore((s) => s.toggleLeftPanel);
+  return useHotkeyById(HotkeyEnum.ToggleLeftPanel, () => toggleLeftPanel(), {
+    enableOnContentEditable: true,
+    enabled: !isZenMode,
+  });
+};
+
+export const useToggleRightPanelHotkey = () => {
+  const isZenMode = useGlobalStore((s) => s.status.zenMode);
+  const toggleConfig = useGlobalStore((s) => s.toggleRightPanel);
+
+  return useHotkeyById(HotkeyEnum.ToggleRightPanel, () => toggleConfig(), {
+    enableOnContentEditable: true,
+    enabled: !isZenMode,
+  });
+};
+
+// CMDK
+export const useCommandPaletteHotkey = () => {
+  const toggleCommandMenu = useGlobalStore((s) => s.toggleCommandMenu);
+
+  return useHotkeyById(HotkeyEnum.CommandPalette, () => toggleCommandMenu(), {
+    enableOnContentEditable: true,
+  });
+};
 
 export const useRegisterGlobalHotkeys = () => {
-  // 全局自动注册不需要 enableScope
-  useSwitchAgentHotkey();
+  // Global auto-registration doesn't need enableScope
+  useToggleLeftPanelHotkey();
+  useToggleRightPanelHotkey();
+  useNavigateToChatHotkey();
   useOpenHotkeyHelperHotkey();
+  useCommandPaletteHotkey();
 };

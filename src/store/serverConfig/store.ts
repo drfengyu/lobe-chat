@@ -1,44 +1,53 @@
-import { StoreApi } from 'zustand';
-import { createContext } from 'zustand-utils';
+import { type StoreApiWithSelector } from '@lobechat/types';
+import { type StoreApi } from 'zustand';
 import { shallow } from 'zustand/shallow';
 import { createWithEqualityFn } from 'zustand/traditional';
-import { StateCreator } from 'zustand/vanilla';
+import { type StateCreator } from 'zustand/vanilla';
+import { createContext } from 'zustand-utils';
 
-import { DEFAULT_FEATURE_FLAGS, IFeatureFlags } from '@/config/featureFlags';
+import { type IFeatureFlagsState } from '@/config/featureFlags';
+import { DEFAULT_FEATURE_FLAGS, mapFeatureFlagsEnvToState } from '@/config/featureFlags';
 import { createDevtools } from '@/store/middleware/createDevtools';
-import { GlobalServerConfig } from '@/types/serverConfig';
+import { type GlobalServerConfig } from '@/types/serverConfig';
 import { merge } from '@/utils/merge';
-import { StoreApiWithSelector } from '@/utils/zustand';
 
-import { ServerConfigAction, createServerConfigSlice } from './action';
+import { flattenActions } from '../utils/flattenActions';
+import { type ServerConfigAction } from './action';
+import { createServerConfigSlice } from './action';
 
 interface ServerConfigState {
-  featureFlags: IFeatureFlags;
+  featureFlags: IFeatureFlagsState;
   isMobile?: boolean;
+  segmentVariants?: string;
   serverConfig: GlobalServerConfig;
+  serverConfigInit: boolean;
 }
 
 const initialState: ServerConfigState = {
-  featureFlags: DEFAULT_FEATURE_FLAGS,
+  featureFlags: mapFeatureFlagsEnvToState(DEFAULT_FEATURE_FLAGS),
+  segmentVariants: '',
   serverConfig: { aiProvider: {}, telemetry: {} },
+  serverConfigInit: false,
 };
 
-//  ===============  聚合 createStoreFn ============ //
+//  ===============  Aggregate createStoreFn ============ //
 
 export interface ServerConfigStore extends ServerConfigState, ServerConfigAction {}
+
+type ServerConfigStoreAction = ServerConfigAction;
 
 type CreateStore = (
   initState: Partial<ServerConfigStore>,
 ) => StateCreator<ServerConfigStore, [['zustand/devtools', never]]>;
 
 const createStore: CreateStore =
-  (runtimeState) =>
+  (runtimeState: any) =>
   (...params) => ({
     ...merge(initialState, runtimeState),
-    ...createServerConfigSlice(...params),
+    ...flattenActions<ServerConfigStoreAction>([createServerConfigSlice(...params)]),
   });
 
-//  ===============  实装 useStore ============ //
+//  ===============  Implement useStore ============ //
 
 let store: StoreApi<ServerConfigStore>;
 

@@ -1,10 +1,11 @@
+import { type UniformSearchResponse } from '@lobechat/types';
+import { SEARCH_SEARXNG_NOT_CONFIG } from '@lobechat/types';
 import { TRPCError } from '@trpc/server';
 
-import { toolsEnv } from '@/config/tools';
+import { toolsEnv } from '@/envs/tools';
 import { SearXNGClient } from '@/server/services/search/impls/searxng/client';
-import { SEARCH_SEARXNG_NOT_CONFIG, UniformSearchResponse } from '@/types/tool/search';
 
-import { SearchServiceImpl } from '../type';
+import { type SearchServiceImpl } from '../type';
 
 /**
  * SearXNG implementation of the search service

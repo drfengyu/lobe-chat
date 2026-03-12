@@ -1,6 +1,6 @@
-import { RuntimeImageGenParamsKeys } from '@/libs/standard-parameters/meta-schema';
+import { type RuntimeImageGenParamsKeys } from 'model-bank';
 
-import { GenerationConfigState } from './initialState';
+import { type GenerationConfigState } from './initialState';
 
 export const model = (s: GenerationConfigState) => s.model;
 export const provider = (s: GenerationConfigState) => s.provider;

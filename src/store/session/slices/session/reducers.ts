@@ -1,9 +1,9 @@
 import { produce } from 'immer';
 
-import { LobeAgentSession, LobeSessions } from '@/types/session';
+import { type LobeSession, type LobeSessions } from '@/types/session';
 
 interface AddSession {
-  session: LobeAgentSession;
+  session: LobeSession;
   type: 'addSession';
 }
 
@@ -15,7 +15,7 @@ interface RemoveSession {
 interface UpdateSession {
   id: string;
   type: 'updateSession';
-  value: Partial<LobeAgentSession>;
+  value: Partial<LobeSession>;
 }
 
 export type SessionDispatch = AddSession | RemoveSession | UpdateSession;
@@ -27,7 +27,7 @@ export const sessionsReducer = (state: LobeSessions, payload: SessionDispatch): 
         const { session } = payload;
         if (!session) return;
 
-        // TODO: 后续将 Date 类型做个迁移，就可以移除这里的 ignore 了
+        // TODO: Migrate Date type in the future to remove this ignore
         // @ts-ignore
         draft.unshift({ ...session, createdAt: new Date(), updatedAt: new Date() });
       });

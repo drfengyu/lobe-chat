@@ -1,9 +1,10 @@
+import { EdgeConfig } from '@lobechat/edge-config';
 import urlJoin from 'url-join';
 
 import { DEFAULT_LANG, isLocaleNotSupport } from '@/const/locale';
 import { appEnv } from '@/envs/app';
-import { Locales, normalizeLocale } from '@/locales/resources';
-import { EdgeConfig } from '@/server/modules/EdgeConfig';
+import { type Locales } from '@/locales/resources';
+import { normalizeLocale } from '@/locales/resources';
 import { CacheRevalidate, CacheTag } from '@/types/discover';
 
 export class AssistantStore {
@@ -26,9 +27,8 @@ export class AssistantStore {
   };
 
   getAgentIndex = async (locale: Locales = DEFAULT_LANG): Promise<any[]> => {
+    let res: Response;
     try {
-      let res: Response;
-
       res = await fetch(this.getAgentIndexUrl(locale as any), {
         cache: 'force-cache',
         next: { revalidate: CacheRevalidate.List, tags: [CacheTag.Discover, CacheTag.Assistants] },
@@ -49,7 +49,7 @@ export class AssistantStore {
         return [];
       }
 
-      const data: any = await res.json();
+      const data: any = await res.clone().json();
 
       if (EdgeConfig.isEnabled()) {
         // Get the assistant whitelist from Edge Config
@@ -75,8 +75,11 @@ export class AssistantStore {
         return [];
       }
 
-      console.error('[AgentIndexFetchError] failed to fetch agent index, error detail:');
+      console.error(`[AgentIndexFetchError] failed to fetch agent index, error detail:`);
       console.error(e);
+      if (res!) {
+        console.error(`status code: ${res?.status}`, await res.text());
+      }
 
       throw e;
     }
@@ -91,7 +94,7 @@ export class AssistantStore {
       },
     });
     if (!res.ok) {
-      res = await fetch(this.getAgentUrl(DEFAULT_LANG), {
+      res = await fetch(this.getAgentUrl(identifier, DEFAULT_LANG), {
         cache: 'force-cache',
         next: {
           revalidate: CacheRevalidate.Details,
@@ -100,7 +103,7 @@ export class AssistantStore {
       });
     }
     if (!res.ok) return;
-    let data = await res.json();
+    const data = await res.json();
     return data;
   };
 }

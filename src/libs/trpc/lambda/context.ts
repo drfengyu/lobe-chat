@@ -1,15 +1,29 @@
+import { type Context as OtContext } from '@lobechat/observability-otel/api';
+import { type ClientSecretPayload } from '@lobechat/types';
 import { parse } from 'cookie';
 import debug from 'debug';
-import { User } from 'next-auth';
-import { NextRequest } from 'next/server';
+import { type NextRequest } from 'next/server';
 
-import { JWTPayload, LOBE_CHAT_AUTH_HEADER, enableClerk, enableNextAuth } from '@/const/auth';
-import { oidcEnv } from '@/envs/oidc';
-import { ClerkAuth, IClerkAuth } from '@/libs/clerk-auth';
+import { auth } from '@/auth';
+import { authEnv, LOBE_CHAT_AUTH_HEADER, LOBE_CHAT_OIDC_AUTH_HEADER } from '@/envs/auth';
+import { extractTraceContext } from '@/libs/observability/traceparent';
 import { validateOIDCJWT } from '@/libs/oidc-provider/jwt';
 
 // Create context logger namespace
 const log = debug('lobe-trpc:lambda:context');
+
+const extractClientIp = (request: NextRequest): string | undefined => {
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  if (forwardedFor) {
+    const ip = forwardedFor.split(',')[0]?.trim();
+    if (ip) return ip;
+  }
+
+  const realIp = request.headers.get('x-real-ip')?.trim();
+  if (realIp) return realIp;
+
+  return undefined;
+};
 
 export interface OIDCAuth {
   // Other OIDC information that might be needed (optional, as payload contains all info)
@@ -22,13 +36,13 @@ export interface OIDCAuth {
 
 export interface AuthContext {
   authorizationHeader?: string | null;
-  clerkAuth?: IClerkAuth;
-  jwtPayload?: JWTPayload | null;
+  clientIp?: string | null;
+  jwtPayload?: ClientSecretPayload | null;
   marketAccessToken?: string;
-  nextAuth?: User;
   // Add OIDC authentication information
   oidcAuth?: OIDCAuth | null;
   resHeaders?: Headers;
+  traceContext?: OtContext;
   userAgent?: string;
   userId?: string | null;
 }
@@ -39,10 +53,10 @@ export interface AuthContext {
  */
 export const createContextInner = async (params?: {
   authorizationHeader?: string | null;
-  clerkAuth?: IClerkAuth;
+  clientIp?: string | null;
   marketAccessToken?: string;
-  nextAuth?: User;
   oidcAuth?: OIDCAuth | null;
+  traceContext?: OtContext;
   userAgent?: string;
   userId?: string | null;
 }): Promise<AuthContext> => {
@@ -51,11 +65,11 @@ export const createContextInner = async (params?: {
 
   return {
     authorizationHeader: params?.authorizationHeader,
-    clerkAuth: params?.clerkAuth,
+    clientIp: params?.clientIp,
     marketAccessToken: params?.marketAccessToken,
-    nextAuth: params?.nextAuth,
     oidcAuth: params?.oidcAuth,
     resHeaders: responseHeaders,
+    traceContext: params?.traceContext,
     userAgent: params?.userAgent,
     userId: params?.userId,
   };
@@ -71,8 +85,13 @@ export const createLambdaContext = async (request: NextRequest): Promise<LambdaC
   // we have a special header to debug the api endpoint in development mode
   // IT WON'T GO INTO PRODUCTION ANYMORE
   const isDebugApi = request.headers.get('lobe-auth-dev-backend-api') === '1';
-  if (process.env.NODE_ENV === 'development' && isDebugApi) {
-    return { userId: process.env.MOCK_DEV_USER_ID };
+  const isMockUser = process.env.ENABLE_MOCK_DEV_USER === '1';
+
+  if (process.env.NODE_ENV === 'development' && (isDebugApi || isMockUser)) {
+    return createContextInner({
+      authorizationHeader: request.headers.get(LOBE_CHAT_AUTH_HEADER),
+      userId: process.env.MOCK_DEV_USER_ID,
+    });
   }
 
   log('createLambdaContext called for request');
@@ -80,30 +99,31 @@ export const createLambdaContext = async (request: NextRequest): Promise<LambdaC
 
   const authorization = request.headers.get(LOBE_CHAT_AUTH_HEADER);
   const userAgent = request.headers.get('user-agent') || undefined;
+  const clientIp = extractClientIp(request);
 
   // get marketAccessToken from cookies
   const cookieHeader = request.headers.get('cookie');
   const cookies = cookieHeader ? parse(cookieHeader) : {};
   const marketAccessToken = cookies['mp_token'];
+  // Extract upstream trace context for parent linking
+  const traceContext = extractTraceContext(request.headers);
 
   log('marketAccessToken from cookie:', marketAccessToken ? '[HIDDEN]' : 'undefined');
   const commonContext = {
     authorizationHeader: authorization,
+    clientIp,
     marketAccessToken,
     userAgent,
   };
   log('LobeChat Authorization header: %s', authorization ? 'exists' : 'not found');
 
   let userId;
-  let auth;
-  let oidcAuth = null;
+  let oidcAuth;
 
   // Prioritize checking for OIDC authentication (both standard Authorization and custom Oidc-Auth headers)
-  if (oidcEnv.ENABLE_OIDC) {
+  if (authEnv.ENABLE_OIDC) {
     log('OIDC enabled, attempting OIDC authentication');
-    const standardAuthorization = request.headers.get('Authorization');
-    const oidcAuthToken = request.headers.get('Oidc-Auth');
-    log('Standard Authorization header: %s', standardAuthorization ? 'exists' : 'not found');
+    const oidcAuthToken = request.headers.get(LOBE_CHAT_OIDC_AUTH_HEADER);
     log('Oidc-Auth header: %s', oidcAuthToken ? 'exists' : 'not found');
 
     try {
@@ -124,6 +144,7 @@ export const createLambdaContext = async (request: NextRequest): Promise<LambdaC
         return createContextInner({
           oidcAuth,
           ...commonContext,
+          traceContext,
           userId,
         });
       }
@@ -136,44 +157,28 @@ export const createLambdaContext = async (request: NextRequest): Promise<LambdaC
     }
   }
 
-  // If OIDC is not enabled or validation fails, try LobeChat custom Header and other authentication methods
-  if (enableClerk) {
-    log('Attempting Clerk authentication');
-    const clerkAuth = new ClerkAuth();
-    const result = clerkAuth.getAuthFromRequest(request);
-    auth = result.clerkAuth;
-    userId = result.userId;
-    log('Clerk authentication result, userId: %s', userId || 'not authenticated');
+  // If OIDC is not enabled or validation fails, try Better Auth authentication
+  log('Attempting Better Auth authentication');
+  try {
+    const session = await auth.api.getSession({
+      headers: request.headers,
+    });
+
+    if (session && session?.user?.id) {
+      userId = session.user.id;
+      log('Better Auth authentication successful, userId: %s', userId);
+    } else {
+      log('Better Auth authentication failed, no valid session');
+    }
 
     return createContextInner({
-      clerkAuth: auth,
       ...commonContext,
+      traceContext,
       userId,
     });
-  }
-
-  if (enableNextAuth) {
-    log('Attempting NextAuth authentication');
-    try {
-      const { default: NextAuthEdge } = await import('@/libs/next-auth/edge');
-
-      const session = await NextAuthEdge.auth();
-      if (session && session?.user?.id) {
-        auth = session.user;
-        userId = session.user.id;
-        log('NextAuth authentication successful, userId: %s', userId);
-      } else {
-        log('NextAuth authentication failed, no valid session');
-      }
-      return createContextInner({
-        nextAuth: auth,
-        ...commonContext,
-        userId,
-      });
-    } catch (e) {
-      log('NextAuth authentication error: %O', e);
-      console.error('next auth err', e);
-    }
+  } catch (e) {
+    log('Better Auth authentication error: %O', e);
+    console.error('better auth err', e);
   }
 
   // Final return, userId may be undefined
@@ -181,5 +186,5 @@ export const createLambdaContext = async (request: NextRequest): Promise<LambdaC
     'All authentication methods attempted, returning final context, userId: %s',
     userId || 'not authenticated',
   );
-  return createContextInner({ ...commonContext, userId });
+  return createContextInner({ ...commonContext, traceContext, userId });
 };

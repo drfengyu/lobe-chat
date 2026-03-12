@@ -4,20 +4,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 /**
  * This file contains the root router of your tRPC-backend
  */
-import { createCallerFactory } from '@/libs/trpc/edge';
-import { AuthContext, createContextInner } from '@/libs/trpc/edge/context';
+import { createCallerFactory } from '@/libs/trpc/lambda';
+import { type AuthContext } from '@/libs/trpc/lambda/context';
+import { createContextInner } from '@/libs/trpc/lambda/context';
 
 import { configRouter } from './index';
 
 const createCaller = createCallerFactory(configRouter);
 let ctx: AuthContext;
 let router: ReturnType<typeof createCaller>;
-
-vi.mock('@/libs/next-auth/edge', () => {
-  return {
-    auth: vi.fn().mockResolvedValue(undefined),
-  };
-});
 
 beforeEach(async () => {
   vi.resetAllMocks();
@@ -36,7 +31,7 @@ describe('configRouter', () => {
           const response = await router.getGlobalConfig();
 
           // Assert
-          const result = response.serverConfig.languageModel?.openai;
+          const result = response.serverConfig.aiProvider?.openai;
 
           expect(result).toMatchSnapshot();
           process.env.OPENAI_MODEL_LIST = '';
@@ -48,7 +43,7 @@ describe('configRouter', () => {
 
           const response = await router.getGlobalConfig();
 
-          const result = response.serverConfig.languageModel?.openai?.serverModelCards;
+          const result = response.serverConfig.aiProvider?.openai?.serverModelLists;
 
           expect(result).toMatchSnapshot();
 
@@ -61,7 +56,7 @@ describe('configRouter', () => {
 
           const response = await router.getGlobalConfig();
 
-          const result = response.serverConfig.languageModel?.openai?.serverModelCards;
+          const result = response.serverConfig.aiProvider?.openai?.serverModelLists;
 
           expect(result?.find((s) => s.id === 'gpt-4-0125-preview')?.displayName).toEqual(
             'gpt-4-32k',
@@ -75,7 +70,7 @@ describe('configRouter', () => {
 
           const response = await router.getGlobalConfig();
 
-          const result = response.serverConfig.languageModel?.openai?.serverModelCards;
+          const result = response.serverConfig.aiProvider?.openai?.serverModelLists;
 
           expect(result?.find((r) => r.id === 'gpt-4')).toBeUndefined();
 
@@ -87,7 +82,7 @@ describe('configRouter', () => {
 
           const response = await router.getGlobalConfig();
 
-          const result = response.serverConfig.languageModel?.openai?.serverModelCards;
+          const result = response.serverConfig.aiProvider?.openai?.serverModelLists;
 
           const model = result?.find((o) => o.id === 'gpt-4-1106-preview');
 
@@ -101,28 +96,36 @@ describe('configRouter', () => {
 
           const response = await router.getGlobalConfig();
 
-          const result = response.serverConfig.languageModel?.openai?.serverModelCards;
+          const result = response.serverConfig.aiProvider?.openai?.serverModelLists;
 
-          expect(result).toContainEqual({
-            displayName: 'model1',
-            id: 'model1',
-            enabled: true,
-          });
-          expect(result).toContainEqual({
-            displayName: 'model2',
-            enabled: true,
-            id: 'model2',
-          });
-          expect(result).toContainEqual({
-            displayName: 'model3',
-            enabled: true,
-            id: 'model3',
-          });
-          expect(result).toContainEqual({
-            displayName: 'model4',
-            enabled: true,
-            id: 'model4',
-          });
+          expect(result).toContainEqual(
+            expect.objectContaining({
+              displayName: 'model1',
+              id: 'model1',
+              enabled: true,
+            }),
+          );
+          expect(result).toContainEqual(
+            expect.objectContaining({
+              displayName: 'model2',
+              enabled: true,
+              id: 'model2',
+            }),
+          );
+          expect(result).toContainEqual(
+            expect.objectContaining({
+              displayName: 'model3',
+              enabled: true,
+              id: 'model3',
+            }),
+          );
+          expect(result).toContainEqual(
+            expect.objectContaining({
+              displayName: 'model4',
+              enabled: true,
+              id: 'model4',
+            }),
+          );
 
           process.env.OPENAI_MODEL_LIST = '';
         });
@@ -136,7 +139,7 @@ describe('configRouter', () => {
           const response = await router.getGlobalConfig();
 
           // Assert
-          const result = response.serverConfig.languageModel?.openrouter;
+          const result = response.serverConfig.aiProvider?.openrouter;
 
           expect(result).toMatchSnapshot();
 

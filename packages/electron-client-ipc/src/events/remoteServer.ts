@@ -1,35 +1,37 @@
-import { DataSyncConfig } from '../types/dataSync';
-import { ProxyTRPCRequestParams, ProxyTRPCRequestResult } from '../types/proxyTRPCRequest';
-
-/**
- * 远程服务器配置相关的事件
- */
-export interface RemoteServerDispatchEvents {
-  clearRemoteServerConfig: () => boolean;
-  getRemoteServerConfig: () => DataSyncConfig;
-  /**
-   * Proxy a tRPC request to the remote server.
-   * @param args - Request arguments.
-   * @returns Promise resolving with the response details.
-   */
-  proxyTRPCRequest: (args: ProxyTRPCRequestParams) => ProxyTRPCRequestResult;
-  refreshAccessToken: () => {
-    error?: string;
-    success: boolean;
-  };
-  requestAuthorization: (config: DataSyncConfig) => {
-    error?: string;
-    success: boolean;
-  };
-  setRemoteServerConfig: (config: DataSyncConfig) => boolean;
+export interface MarketAuthorizationParams {
+  authUrl: string;
 }
 
 /**
- * 从主进程广播的远程服务器相关事件
+ * Authorization phase for progress tracking
+ */
+export type AuthorizationPhase =
+  | 'browser_opened' // Browser has been opened for authorization
+  | 'waiting_for_auth' // Waiting for user to complete browser login
+  | 'verifying' // Received credentials, verifying with server
+  | 'cancelled'; // Authorization was cancelled by user
+
+/**
+ * Authorization progress info for UI updates
+ */
+export interface AuthorizationProgress {
+  /** Elapsed time in milliseconds since authorization started */
+  elapsed: number;
+  /** Maximum polling time in milliseconds */
+  maxPollTime: number;
+  /** Current authorization phase */
+  phase: AuthorizationPhase;
+}
+
+/**
+ * Remote server related events broadcast from main process
  */
 export interface RemoteServerBroadcastEvents {
   authorizationFailed: (params: { error: string }) => void;
+  /** Broadcast authorization progress for UI updates */
+  authorizationProgress: (params: AuthorizationProgress) => void;
   authorizationRequired: (params: void) => void;
   authorizationSuccessful: (params: void) => void;
+  remoteServerConfigUpdated: (params: void) => void;
   tokenRefreshed: (params: void) => void;
 }

@@ -1,8 +1,9 @@
-import OpenAI, { ClientOptions } from 'openai';
+import { ChatErrorType } from '@lobechat/types';
+import { type ClientOptions } from 'openai';
+import OpenAI from 'openai';
 import urlJoin from 'url-join';
 
-import { getLLMConfig } from '@/config/llm';
-import { ChatErrorType } from '@/types/fetch';
+import { getLLMConfig } from '@/envs/llm';
 
 // create Azure OpenAI Instance
 export const createAzureOpenai = (params: {

@@ -15,5 +15,17 @@ export const setupElectronApi = () => {
     console.error(error);
   }
 
-  contextBridge.exposeInMainWorld('electronAPI', { invoke, onStreamInvoke });
+  contextBridge.exposeInMainWorld('electronAPI', {
+    invoke,
+    onStreamInvoke,
+  });
+
+  const os = require('node:os');
+  const osInfo = os.release();
+  const darwinMajorVersion = Number(osInfo.split('.')[0]);
+
+  contextBridge.exposeInMainWorld('lobeEnv', {
+    darwinMajorVersion,
+    isMacTahoe: process.platform === 'darwin' && darwinMajorVersion >= 25,
+  });
 };

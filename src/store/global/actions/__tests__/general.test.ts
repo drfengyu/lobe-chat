@@ -1,13 +1,12 @@
 import { act, renderHook } from '@testing-library/react';
-import { ThemeMode } from 'antd-style';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { withSWR } from '~test-utils';
 
 import { CURRENT_VERSION } from '@/const/version';
 import { globalService } from '@/services/global';
 import { useGlobalStore } from '@/store/global';
 import { initialState } from '@/store/global/initialState';
 import { switchLang } from '@/utils/client/switchLang';
+import { withSWR } from '~test-utils';
 
 vi.mock('@/utils/client/switchLang', () => ({
   switchLang: vi.fn(),
@@ -34,7 +33,7 @@ describe('generalActionSlice', () => {
       const { result } = renderHook(() => useGlobalStore());
 
       act(() => {
-        result.current.updateSystemStatus({ inputHeight: 200 });
+        result.current.updateSystemStatus({ noWideScreen: false });
       });
 
       expect(result.current.status).toEqual(initialState.status);
@@ -45,10 +44,10 @@ describe('generalActionSlice', () => {
 
       act(() => {
         useGlobalStore.setState({ isStatusInit: true });
-        result.current.updateSystemStatus({ inputHeight: 200 });
+        result.current.updateSystemStatus({ noWideScreen: false });
       });
 
-      expect(result.current.status.inputHeight).toBe(200);
+      expect(result.current.status.noWideScreen).toBe(false);
     });
 
     it('should not update if new status equals current status', () => {
@@ -57,7 +56,7 @@ describe('generalActionSlice', () => {
 
       act(() => {
         useGlobalStore.setState({ isStatusInit: true });
-        result.current.updateSystemStatus({ inputHeight: initialState.status.inputHeight });
+        result.current.updateSystemStatus({ noWideScreen: initialState.status.noWideScreen });
       });
 
       expect(saveToLocalStorageSpy).not.toHaveBeenCalled();
@@ -69,11 +68,11 @@ describe('generalActionSlice', () => {
 
       act(() => {
         useGlobalStore.setState({ isStatusInit: true });
-        result.current.updateSystemStatus({ inputHeight: 300 });
+        result.current.updateSystemStatus({ noWideScreen: false });
       });
 
       expect(saveToLocalStorageSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ inputHeight: 300 }),
+        expect.objectContaining({ noWideScreen: false }),
       );
     });
 
@@ -117,39 +116,33 @@ describe('generalActionSlice', () => {
     });
   });
 
-  describe('switchThemeMode', () => {
-    it('should update theme mode in system status', () => {
-      const { result } = renderHook(() => useGlobalStore());
-      const themeMode: ThemeMode = 'dark';
+  describe('useInitSystemStatus', () => {
+    it('should reset transient UI states when loading from localStorage', async () => {
+      const mockStatus = {
+        ...initialState.status,
+        showCommandMenu: true,
+        showHotkeyHelper: true,
+        noWideScreen: false,
+      };
 
-      act(() => {
-        useGlobalStore.setState({ isStatusInit: true });
-        result.current.switchThemeMode(themeMode);
+      const { result } = renderHook(() => useGlobalStore());
+      const getFromLocalStorageSpy = vi
+        .spyOn(result.current.statusStorage, 'getFromLocalStorage')
+        .mockResolvedValueOnce(mockStatus);
+
+      const { result: hookResult } = renderHook(() => useGlobalStore().useInitSystemStatus(), {
+        wrapper: withSWR,
       });
 
-      expect(result.current.status.themeMode).toBe(themeMode);
-    });
-
-    it('should not update theme mode if status is not initialized', () => {
-      const { result } = renderHook(() => useGlobalStore());
-      const themeMode: ThemeMode = 'dark';
-
-      act(() => {
-        result.current.switchThemeMode(themeMode);
+      await act(async () => {
+        await hookResult.current.data;
       });
 
-      expect(result.current.status.themeMode).toBe(initialState.status.themeMode);
-    });
-
-    it('should handle light theme mode', () => {
-      const { result } = renderHook(() => useGlobalStore());
-
-      act(() => {
-        useGlobalStore.setState({ isStatusInit: true });
-        result.current.switchThemeMode('light');
-      });
-
-      expect(result.current.status.themeMode).toBe('light');
+      expect(getFromLocalStorageSpy).toHaveBeenCalled();
+      expect(useGlobalStore.getState().isStatusInit).toBe(true);
+      expect(useGlobalStore.getState().status.showCommandMenu).toBe(false);
+      expect(useGlobalStore.getState().status.showHotkeyHelper).toBe(false);
+      expect(useGlobalStore.getState().status.noWideScreen).toBe(false);
     });
   });
 

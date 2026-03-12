@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { UserStore } from '@/store/user';
+import { type UserStore } from '@/store/user';
 
 import { initialPreferenceState } from './initialState';
 import { preferenceSelectors } from './selectors';
@@ -26,19 +26,6 @@ describe('preferenceSelectors', () => {
     it('should return false if useCmdEnterToSend preference is undefined', () => {
       store.preference.useCmdEnterToSend = undefined;
       expect(preferenceSelectors.useCmdEnterToSend(store)).toBe(false);
-    });
-  });
-
-  describe('userAllowTrace', () => {
-    it('should return the value of telemetry preference', () => {
-      store.preference.telemetry = true;
-      expect(preferenceSelectors.userAllowTrace(store)).toBe(true);
-
-      store.preference.telemetry = false;
-      expect(preferenceSelectors.userAllowTrace(store)).toBe(false);
-
-      store.preference.telemetry = null;
-      expect(preferenceSelectors.userAllowTrace(store)).toBe(null);
     });
   });
 

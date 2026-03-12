@@ -3,8 +3,8 @@ import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import OllamaModelDownloader from '@/features/OllamaModelDownloader';
-import { useChatStore } from '@/store/chat';
 
+import { useConversationStore } from '../../store';
 import { ErrorActionContainer } from '../style';
 
 interface InvalidOllamaModelProps {
@@ -15,13 +15,14 @@ interface InvalidOllamaModelProps {
 const InvalidOllamaModel = memo<InvalidOllamaModelProps>(({ id, model }) => {
   const { t } = useTranslation('error');
 
-  const [delAndRegenerateMessage, deleteMessage] = useChatStore((s) => [
+  const [delAndRegenerateMessage, deleteMessage] = useConversationStore((s) => [
     s.delAndRegenerateMessage,
     s.deleteMessage,
   ]);
   return (
     <ErrorActionContainer>
       <OllamaModelDownloader
+        model={model}
         extraAction={
           <Button
             onClick={() => {
@@ -31,7 +32,6 @@ const InvalidOllamaModel = memo<InvalidOllamaModelProps>(({ id, model }) => {
             {t('unlock.closeMessage')}
           </Button>
         }
-        model={model}
         onSuccessDownload={() => {
           delAndRegenerateMessage(id);
         }}

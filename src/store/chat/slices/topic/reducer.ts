@@ -1,23 +1,23 @@
+import isEqual from 'fast-deep-equal';
 import { produce } from 'immer';
 
-import { CreateTopicParams } from '@/services/topic/type';
-import { ChatTopic } from '@/types/topic';
+import { type ChatTopic, type CreateTopicParams } from '@/types/topic';
 
-interface AddChatTopicAction {
+type AddChatTopicAction = {
   type: 'addTopic';
   value: CreateTopicParams & { id?: string };
-}
+};
 
-interface UpdateChatTopicAction {
+type UpdateChatTopicAction = {
   id: string;
   type: 'updateTopic';
   value: Partial<ChatTopic>;
-}
+};
 
-interface DeleteChatTopicAction {
+type DeleteChatTopicAction = {
   id: string;
   type: 'deleteTopic';
-}
+};
 
 export type ChatTopicDispatch = AddChatTopicAction | UpdateChatTopicAction | DeleteChatTopicAction;
 
@@ -44,9 +44,16 @@ export const topicReducer = (state: ChatTopic[] = [], payload: ChatTopicDispatch
         const topicIndex = draftState.findIndex((topic) => topic.id === id);
 
         if (topicIndex !== -1) {
-          // TODO: updatedAt 类型后续需要修改为 Date
-          // @ts-ignore
-          draftState[topicIndex] = { ...draftState[topicIndex], ...value, updatedAt: new Date() };
+          const currentTopic = draftState[topicIndex];
+          const mergedTopic = { ...currentTopic, ...value };
+
+          // Only update if the merged value is different from current (excluding updatedAt)
+
+          if (!isEqual(currentTopic, mergedTopic)) {
+            // TODO: updatedAt type needs to be changed to Date later
+            // @ts-ignore
+            draftState[topicIndex] = { ...mergedTopic, updatedAt: new Date() };
+          }
         }
       });
     }

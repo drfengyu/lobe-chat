@@ -1,10 +1,10 @@
+import { type LobeTool } from '@lobechat/types';
 import { z } from 'zod';
 
 import { PluginModel } from '@/database/models/plugin';
 import { getServerDB } from '@/database/server';
 import { authedProcedure, publicProcedure, router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
-import { LobeTool } from '@/types/tool';
 
 const pluginProcedure = authedProcedure.use(serverDatabase).use(async (opts) => {
   const { ctx } = opts;
@@ -65,7 +65,7 @@ export const pluginRouter = router({
       return data.identifier;
     }),
 
-  // TODO: 未来这部分方法也需要使用 authedProcedure
+  // TODO: In the future, this method also needs to use authedProcedure
   getPlugins: publicProcedure.query(async ({ ctx }): Promise<LobeTool[]> => {
     if (!ctx.userId) return [];
 

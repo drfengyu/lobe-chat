@@ -1,19 +1,6 @@
-import { PluginItem } from '@lobehub/market-sdk';
+import { type PluginItem } from '@lobehub/market-sdk';
 
-import { MCPInstallProgressMap } from '@/types/plugins';
-
-/* eslint-disable typescript-sort-keys/string-enum */
-export enum MCPInstallStep {
-  FETCHING_MANIFEST = 'FETCHING_MANIFEST',
-  CHECKING_INSTALLATION = 'CHECKING_INSTALLATION',
-  DEPENDENCIES_REQUIRED = 'DEPENDENCIES_REQUIRED',
-  GETTING_SERVER_MANIFEST = 'GETTING_SERVER_MANIFEST',
-  CONFIGURATION_REQUIRED = 'CONFIGURATION_REQUIRED',
-  INSTALLING_PLUGIN = 'INSTALLING_PLUGIN',
-  COMPLETED = 'COMPLETED',
-  ERROR = 'Error',
-}
-/* eslint-enable */
+import { type MCPInstallProgressMap } from '@/types/plugins';
 
 export interface MCPStoreState {
   activeMCPIdentifier?: string;
@@ -25,6 +12,10 @@ export interface MCPStoreState {
   mcpInstallProgress: MCPInstallProgressMap;
   mcpPluginItems: PluginItem[];
   mcpSearchKeywords?: string;
+  // Test connection related state
+  mcpTestAbortControllers: Record<string, AbortController>;
+  mcpTestErrors: Record<string, string>;
+  mcpTestLoading: Record<string, boolean>;
   searchLoading?: boolean;
   tags?: string[];
   totalCount?: number;
@@ -37,4 +28,8 @@ export const initialMCPStoreState: MCPStoreState = {
   mcpInstallAbortControllers: {},
   mcpInstallProgress: {},
   mcpPluginItems: [],
+  // Test connection related state initialization
+  mcpTestAbortControllers: {},
+  mcpTestErrors: {},
+  mcpTestLoading: {},
 };

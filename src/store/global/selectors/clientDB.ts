@@ -1,4 +1,4 @@
-import { GlobalState } from '@/store/global/initialState';
+import { type GlobalState } from '@/store/global/initialState';
 
 const initClientDBMigrationSqls = (s: GlobalState) => {
   return s.initClientDBMigrations?.sqls || [];
@@ -24,7 +24,7 @@ const displayMigrationStatus = (s: GlobalState) => {
           status: !!recordInTable ? 'success' : 'error',
         };
       })
-      // 时间倒序
+      // Sort by time in descending order
       .sort((a, b) => b.folderMillis - a.folderMillis)
   );
 };

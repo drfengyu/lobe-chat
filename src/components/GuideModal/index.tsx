@@ -1,12 +1,15 @@
 'use client';
 
-import { ConfigProvider, Modal, type ModalProps } from 'antd';
-import { createStyles } from 'antd-style';
-import { lighten } from 'polished';
-import { ReactNode, memo } from 'react';
-import { Flexbox } from 'react-layout-kit';
+import { Flexbox } from '@lobehub/ui';
+import { type ModalProps } from 'antd';
+import { ConfigProvider, Modal } from 'antd';
+import { createStaticStyles, cssVar, cx } from 'antd-style';
+import { type ReactNode } from 'react';
+import { memo, useMemo } from 'react';
 
-const useStyles = createStyles(({ css, token, prefixCls }) => {
+const prefixCls = 'ant';
+
+const styles = createStaticStyles(({ css }) => {
   return {
     content: css`
       .${prefixCls}-modal-footer {
@@ -23,11 +26,11 @@ const useStyles = createStyles(({ css, token, prefixCls }) => {
         margin-block-end: 0;
         padding: 16px;
       }
-      .${prefixCls}-modal-content {
+      .${prefixCls}-modal-container {
         overflow: hidden;
         padding: 0;
-        border: 1px solid ${token.colorSplit};
-        border-radius: ${token.borderRadiusLG}px;
+        border: 1px solid ${cssVar.colorSplit};
+        border-radius: ${cssVar.borderRadiusLG};
       }
     `,
     wrap: css`
@@ -44,20 +47,22 @@ interface GuideModalProps extends ModalProps {
 
 const GuideModal = memo<GuideModalProps>(
   ({ className, title, desc, cover, width = 360, ...rest }) => {
-    const { styles, cx, theme } = useStyles();
+    const configTheme = useMemo(
+      () => ({
+        token: {
+          colorBgElevated: `color-mix(in srgb, ${cssVar.colorBgContainer} 99.5%, white)`,
+        },
+      }),
+      [],
+    );
+
     return (
-      <ConfigProvider
-        theme={{
-          token: {
-            colorBgElevated: lighten(0.005, theme.colorBgContainer),
-          },
-        }}
-      >
+      <ConfigProvider theme={configTheme}>
         <Modal
           centered
+          maskClosable
           className={cx(styles.content, className)}
           closable={false}
-          maskClosable
           width={width}
           wrapClassName={styles.wrap}
           {...rest}

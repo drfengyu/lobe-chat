@@ -4,7 +4,7 @@ import { SessionGroupModel } from '@/database/models/sessionGroup';
 import { insertSessionGroupSchema } from '@/database/schemas';
 import { authedProcedure, router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
-import { SessionGroupItem } from '@/types/session';
+import { type SessionGroupItem } from '@/types/session';
 
 const sessionProcedure = authedProcedure.use(serverDatabase).use(async (opts) => {
   const { ctx } = opts;
@@ -69,7 +69,7 @@ export const sessionGroupRouter = router({
       }),
     )
     .mutation(async ({ input, ctx }) => {
-      console.log('sortMap:', input.sortMap);
+      console.info('sortMap:', input.sortMap);
 
       return ctx.sessionGroupModel.updateOrder(input.sortMap);
     }),

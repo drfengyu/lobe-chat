@@ -1,12 +1,12 @@
-import { createStyles } from 'antd-style';
+import { Flexbox } from '@lobehub/ui';
+import { createStaticStyles, cssVar } from 'antd-style';
 import path from 'path-browserify-esm';
 import React from 'react';
-import { Flexbox } from 'react-layout-kit';
 
 import FileIcon from '@/components/FileIcon';
 import { localFileService } from '@/services/electron/localFileService';
 
-const useStyles = createStyles(({ css, token }) => ({
+const styles = createStaticStyles(({ css }) => ({
   container: css`
     cursor: pointer;
 
@@ -14,11 +14,11 @@ const useStyles = createStyles(({ css, token }) => ({
     padding-inline: 4px 8px;
     border-radius: 4px;
 
-    color: ${token.colorTextSecondary};
+    color: ${cssVar.colorTextSecondary};
 
     :hover {
-      color: ${token.colorText};
-      background: ${token.colorFillTertiary};
+      color: ${cssVar.colorText};
+      background: ${cssVar.colorFillTertiary};
     }
   `,
   title: css`
@@ -38,7 +38,6 @@ interface LocalFolderProps {
 }
 
 export const LocalFolder = ({ path: pathname, size = 22 }: LocalFolderProps) => {
-  const { styles } = useStyles();
   const handleClick = () => {
     if (!path) return;
 
@@ -49,15 +48,15 @@ export const LocalFolder = ({ path: pathname, size = 22 }: LocalFolderProps) => 
 
   return (
     <Flexbox
+      horizontal
       align={'center'}
       className={styles.container}
       gap={4}
-      horizontal
-      onClick={handleClick}
       style={{ display: 'inline-flex', verticalAlign: 'middle' }}
+      onClick={handleClick}
     >
-      <FileIcon fileName={base} isDirectory size={size} variant={'raw'} />
-      <Flexbox align={'baseline'} gap={4} horizontal style={{ overflow: 'hidden', width: '100%' }}>
+      <FileIcon isDirectory fileName={base} size={size} variant={'raw'} />
+      <Flexbox horizontal align={'baseline'} gap={4} style={{ overflow: 'hidden', width: '100%' }}>
         <div className={styles.title}>{base}</div>
       </Flexbox>
     </Flexbox>

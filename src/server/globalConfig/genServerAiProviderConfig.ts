@@ -1,9 +1,10 @@
-import * as AiModels from '@/config/aiModels';
-import { getLLMConfig } from '@/config/llm';
-import { ModelProvider } from '@/libs/model-runtime';
-import { AiFullModelCard } from '@/types/aiModel';
-import { ProviderConfig } from '@/types/user/settings';
-import { extractEnabledModels, transformToAiChatModelList } from '@/utils/parseModels';
+import { type ProviderConfig } from '@lobechat/types';
+import { type AiFullModelCard } from 'model-bank';
+import { ModelProvider } from 'model-bank';
+import * as AiModels from 'model-bank';
+
+import { getLLMConfig } from '@/envs/llm';
+import { extractEnabledModels, transformToAiModelList } from '@/utils/server/parseModels';
 
 interface ProviderSpecificConfig {
   enabled?: boolean;
@@ -13,48 +14,59 @@ interface ProviderSpecificConfig {
   withDeploymentName?: boolean;
 }
 
-export const genServerAiProvidersConfig = (specificConfig: Record<any, ProviderSpecificConfig>) => {
+export const genServerAiProvidersConfig = async (
+  specificConfig: Record<any, ProviderSpecificConfig>,
+) => {
   const llmConfig = getLLMConfig() as Record<string, any>;
 
-  return Object.values(ModelProvider).reduce(
-    (config, provider) => {
+  // Process all providers concurrently
+  const providerConfigs = await Promise.all(
+    Object.values(ModelProvider).map(async (provider) => {
       const providerUpperCase = provider.toUpperCase();
-      const providerCard = AiModels[provider] as AiFullModelCard[];
+      const aiModels = AiModels[provider] as AiFullModelCard[];
 
-      if (!providerCard)
+      if (!aiModels)
         throw new Error(
           `Provider [${provider}] not found in aiModels, please make sure you have exported the provider in the \`aiModels/index.ts\``,
         );
 
       const providerConfig = specificConfig[provider as keyof typeof specificConfig] || {};
-      const providerModelList =
+      const modelString =
         process.env[providerConfig.modelListKey ?? `${providerUpperCase}_MODEL_LIST`];
 
-      const defaultChatModels = providerCard.filter((c) => c.type === 'chat');
-
-      config[provider] = {
-        enabled:
-          typeof providerConfig.enabled !== 'undefined'
-            ? providerConfig.enabled
-            : llmConfig[providerConfig.enabledKey || `ENABLED_${providerUpperCase}`],
-
-        enabledModels: extractEnabledModels(
-          providerModelList,
-          providerConfig.withDeploymentName || false,
-        ),
-        serverModelLists: transformToAiChatModelList({
-          defaultChatModels: defaultChatModels || [],
-          modelString: providerModelList,
+      // Process extractEnabledModels and transformToAiModelList concurrently
+      const [enabledModels, serverModelLists] = await Promise.all([
+        extractEnabledModels(provider, modelString, providerConfig.withDeploymentName || false),
+        transformToAiModelList({
+          defaultModels: aiModels || [],
+          modelString,
           providerId: provider,
           withDeploymentName: providerConfig.withDeploymentName || false,
         }),
-        ...(providerConfig.fetchOnClient !== undefined && {
-          fetchOnClient: providerConfig.fetchOnClient,
-        }),
-      };
+      ]);
 
-      return config;
-    },
-    {} as Record<string, ProviderConfig>,
+      return {
+        config: {
+          enabled:
+            typeof providerConfig.enabled !== 'undefined'
+              ? providerConfig.enabled
+              : llmConfig[providerConfig.enabledKey || `ENABLED_${providerUpperCase}`],
+          enabledModels,
+          serverModelLists,
+          ...(providerConfig.fetchOnClient !== undefined && {
+            fetchOnClient: providerConfig.fetchOnClient,
+          }),
+        },
+        provider,
+      };
+    }),
   );
+
+  // Convert the results to an object
+  const config = {} as Record<string, ProviderConfig>;
+  for (const { provider, config: providerConfig } of providerConfigs) {
+    config[provider] = providerConfig;
+  }
+
+  return config;
 };

@@ -1,6 +1,6 @@
-import { GenerationBatchItem } from '@/database/schemas';
+import { type GenerationBatchItem } from '@/database/schemas';
 import { lambdaClient } from '@/libs/trpc/client';
-import { Generation, GenerationBatch } from '@/types/generation';
+import { type Generation, type GenerationBatch } from '@/types/generation';
 
 type GenerationBatchWithAsyncTaskId = GenerationBatch & {
   generations: (Generation & { asyncTaskId?: string | null })[];
@@ -10,8 +10,11 @@ class GenerationBatchService {
   /**
    * Get generation batches for a specific topic
    */
-  async getGenerationBatches(topicId: string): Promise<GenerationBatchWithAsyncTaskId[]> {
-    return lambdaClient.generationBatch.getGenerationBatches.query({ topicId });
+  async getGenerationBatches(
+    topicId: string,
+    type?: 'image' | 'video',
+  ): Promise<GenerationBatchWithAsyncTaskId[]> {
+    return lambdaClient.generationBatch.getGenerationBatches.query({ topicId, type });
   }
 
   /**

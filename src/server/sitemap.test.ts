@@ -5,6 +5,8 @@ import { getCanonicalUrl } from '@/server/utils/url';
 
 import { LAST_MODIFIED, Sitemap, SitemapType } from './sitemap';
 
+const LOCALE_COUNT = 18;
+
 describe('Sitemap', () => {
   const sitemap = new Sitemap();
 
@@ -13,7 +15,6 @@ describe('Sitemap', () => {
       // Mock the page count methods to return specific values for testing
       vi.spyOn(sitemap, 'getPluginPageCount').mockResolvedValue(2);
       vi.spyOn(sitemap, 'getAssistantPageCount').mockResolvedValue(3);
-      vi.spyOn(sitemap, 'getMcpPageCount').mockResolvedValue(1);
       vi.spyOn(sitemap, 'getModelPageCount').mockResolvedValue(2);
 
       const index = await sitemap.getIndex();
@@ -31,7 +32,6 @@ describe('Sitemap', () => {
       expect(index).toContain(`<loc>${getCanonicalUrl('/sitemap/assistants-1.xml')}</loc>`);
       expect(index).toContain(`<loc>${getCanonicalUrl('/sitemap/assistants-2.xml')}</loc>`);
       expect(index).toContain(`<loc>${getCanonicalUrl('/sitemap/assistants-3.xml')}</loc>`);
-      expect(index).toContain(`<loc>${getCanonicalUrl('/sitemap/mcp-1.xml')}</loc>`);
       expect(index).toContain(`<loc>${getCanonicalUrl('/sitemap/models-1.xml')}</loc>`);
       expect(index).toContain(`<loc>${getCanonicalUrl('/sitemap/models-2.xml')}</loc>`);
 
@@ -49,24 +49,24 @@ describe('Sitemap', () => {
           priority: 0.4,
         }),
       );
+      // /discover has been replaced with /community routes
       expect(pageSitemap).toContainEqual(
         expect.objectContaining({
-          url: getCanonicalUrl('/discover'),
-          changeFrequency: 'daily',
-          priority: 0.7,
-        }),
-      );
-      // Note: The actual implementation generates URLs like /discover/assistant and /discover/plugin (not category-specific)
-      expect(pageSitemap).toContainEqual(
-        expect.objectContaining({
-          url: getCanonicalUrl('/discover/assistant'),
+          url: getCanonicalUrl('/community'),
           changeFrequency: 'daily',
           priority: 0.7,
         }),
       );
       expect(pageSitemap).toContainEqual(
         expect.objectContaining({
-          url: getCanonicalUrl('/discover/plugin'),
+          url: getCanonicalUrl('/community/agent'),
+          changeFrequency: 'daily',
+          priority: 0.7,
+        }),
+      );
+      expect(pageSitemap).toContainEqual(
+        expect.objectContaining({
+          url: getCanonicalUrl('/community/plugin'),
           changeFrequency: 'daily',
           priority: 0.7,
         }),
@@ -82,16 +82,16 @@ describe('Sitemap', () => {
       ]);
 
       const assistantsSitemap = await sitemap.getAssistants();
-      expect(assistantsSitemap.length).toBe(15);
+      expect(assistantsSitemap.length).toBe(LOCALE_COUNT);
       expect(assistantsSitemap).toContainEqual(
         expect.objectContaining({
-          url: getCanonicalUrl('/discover/assistant/test-assistant'),
+          url: getCanonicalUrl('/community/agent/test-assistant'),
           lastModified: '2023-01-01T00:00:00.000Z',
         }),
       );
       expect(assistantsSitemap).toContainEqual(
         expect.objectContaining({
-          url: getCanonicalUrl('/discover/assistant/test-assistant?hl=zh-CN'),
+          url: getCanonicalUrl('/community/agent/test-assistant?hl=zh-CN'),
           lastModified: '2023-01-01T00:00:00.000Z',
         }),
       );
@@ -110,20 +110,20 @@ describe('Sitemap', () => {
 
       // Test first page (should have 100 items)
       const firstPageSitemap = await sitemap.getAssistants(1);
-      expect(firstPageSitemap.length).toBe(100 * 15); // 100 items * 15 locales
+      expect(firstPageSitemap.length).toBe(100 * LOCALE_COUNT); // 100 items * LOCALE_COUNT locales
       expect(firstPageSitemap).toContainEqual(
         expect.objectContaining({
-          url: getCanonicalUrl('/discover/assistant/test-assistant-0'),
+          url: getCanonicalUrl('/community/agent/test-assistant-0'),
           lastModified: '2023-01-01T00:00:00.000Z',
         }),
       );
 
       // Test second page (should have 50 items)
       const secondPageSitemap = await sitemap.getAssistants(2);
-      expect(secondPageSitemap.length).toBe(50 * 15); // 50 items * 15 locales
+      expect(secondPageSitemap.length).toBe(50 * LOCALE_COUNT); // 50 items * LOCALE_COUNT locales
       expect(secondPageSitemap).toContainEqual(
         expect.objectContaining({
-          url: getCanonicalUrl('/discover/assistant/test-assistant-100'),
+          url: getCanonicalUrl('/community/agent/test-assistant-100'),
           lastModified: '2023-01-01T00:00:00.000Z',
         }),
       );
@@ -138,16 +138,16 @@ describe('Sitemap', () => {
       ]);
 
       const pluginsSitemap = await sitemap.getPlugins();
-      expect(pluginsSitemap.length).toBe(15);
+      expect(pluginsSitemap.length).toBe(LOCALE_COUNT);
       expect(pluginsSitemap).toContainEqual(
         expect.objectContaining({
-          url: getCanonicalUrl('/discover/plugin/test-plugin'),
+          url: getCanonicalUrl('/community/plugin/test-plugin'),
           lastModified: '2023-01-01T00:00:00.000Z',
         }),
       );
       expect(pluginsSitemap).toContainEqual(
         expect.objectContaining({
-          url: getCanonicalUrl('/discover/plugin/test-plugin?hl=ja-JP'),
+          url: getCanonicalUrl('/community/plugin/test-plugin?hl=ja-JP'),
           lastModified: '2023-01-01T00:00:00.000Z',
         }),
       );
@@ -166,11 +166,11 @@ describe('Sitemap', () => {
 
       // Test first page (should have 100 items)
       const firstPageSitemap = await sitemap.getPlugins(1);
-      expect(firstPageSitemap.length).toBe(100 * 15); // 100 items * 15 locales
+      expect(firstPageSitemap.length).toBe(100 * LOCALE_COUNT); // 100 items * 15 locales
 
       // Test third page (should have 50 items)
       const thirdPageSitemap = await sitemap.getPlugins(3);
-      expect(thirdPageSitemap.length).toBe(50 * 15); // 50 items * 15 locales
+      expect(thirdPageSitemap.length).toBe(50 * LOCALE_COUNT); // 50 items * 15 locales
     });
   });
 
@@ -182,16 +182,16 @@ describe('Sitemap', () => {
       ]);
 
       const modelsSitemap = await sitemap.getModels();
-      expect(modelsSitemap.length).toBe(15);
+      expect(modelsSitemap.length).toBe(LOCALE_COUNT);
       expect(modelsSitemap).toContainEqual(
         expect.objectContaining({
-          url: getCanonicalUrl('/discover/model/test:model'),
+          url: getCanonicalUrl('/community/model/test:model'),
           lastModified: '2023-01-01T00:00:00.000Z',
         }),
       );
       expect(modelsSitemap).toContainEqual(
         expect.objectContaining({
-          url: getCanonicalUrl('/discover/model/test:model?hl=ko-KR'),
+          url: getCanonicalUrl('/community/model/test:model?hl=ko-KR'),
           lastModified: '2023-01-01T00:00:00.000Z',
         }),
       );
@@ -210,51 +210,11 @@ describe('Sitemap', () => {
 
       // Test first page (should have 100 items)
       const firstPageSitemap = await sitemap.getModels(1);
-      expect(firstPageSitemap.length).toBe(100 * 15); // 100 items * 15 locales
+      expect(firstPageSitemap.length).toBe(100 * LOCALE_COUNT); // 100 items * LOCALE_COUNT locales
 
       // Test second page (should have 20 items)
       const secondPageSitemap = await sitemap.getModels(2);
-      expect(secondPageSitemap.length).toBe(20 * 15); // 20 items * 15 locales
-    });
-  });
-
-  describe('getMcp', () => {
-    it('should return a valid mcp sitemap without pagination', async () => {
-      vi.spyOn(sitemap['discoverService'], 'getMcpIdentifiers').mockResolvedValue([
-        // @ts-ignore
-        { identifier: 'test-mcp', lastModified: '2023-01-01' },
-      ]);
-
-      const mcpSitemap = await sitemap.getMcp();
-      expect(mcpSitemap.length).toBe(15);
-      expect(mcpSitemap).toContainEqual(
-        expect.objectContaining({
-          url: getCanonicalUrl('/discover/mcp/test-mcp'),
-          lastModified: '2023-01-01T00:00:00.000Z',
-        }),
-      );
-      expect(mcpSitemap).toContainEqual(
-        expect.objectContaining({
-          url: getCanonicalUrl('/discover/mcp/test-mcp?hl=zh-CN'),
-          lastModified: '2023-01-01T00:00:00.000Z',
-        }),
-      );
-    });
-
-    it('should return a valid mcp sitemap with pagination', async () => {
-      const mockMcps = Array.from({ length: 80 }, (_, i) => ({
-        identifier: `test-mcp-${i}`,
-        lastModified: '2023-01-01',
-      }));
-
-      vi.spyOn(sitemap['discoverService'], 'getMcpIdentifiers').mockResolvedValue(
-        // @ts-ignore
-        mockMcps,
-      );
-
-      // Test first page (should have 80 items, all on first page)
-      const firstPageSitemap = await sitemap.getMcp(1);
-      expect(firstPageSitemap.length).toBe(80 * 15); // 80 items * 15 locales
+      expect(secondPageSitemap.length).toBe(20 * LOCALE_COUNT); // 20 items * LOCALE_COUNT locales
     });
   });
 
@@ -266,16 +226,16 @@ describe('Sitemap', () => {
       ]);
 
       const providersSitemap = await sitemap.getProviders();
-      expect(providersSitemap.length).toBe(15);
+      expect(providersSitemap.length).toBe(LOCALE_COUNT);
       expect(providersSitemap).toContainEqual(
         expect.objectContaining({
-          url: getCanonicalUrl('/discover/provider/test-provider'),
+          url: getCanonicalUrl('/community/provider/test-provider'),
           lastModified: '2023-01-01T00:00:00.000Z',
         }),
       );
       expect(providersSitemap).toContainEqual(
         expect.objectContaining({
-          url: getCanonicalUrl('/discover/provider/test-provider?hl=ar'),
+          url: getCanonicalUrl('/community/provider/test-provider?hl=ar'),
           lastModified: '2023-01-01T00:00:00.000Z',
         }),
       );
@@ -301,16 +261,6 @@ describe('Sitemap', () => {
 
       const pageCount = await sitemap.getAssistantPageCount();
       expect(pageCount).toBe(3); // 250 items / 100 per page = ceil(2.5) = 3 pages
-    });
-
-    it('should return correct mcp page count', async () => {
-      vi.spyOn(sitemap['discoverService'], 'getMcpIdentifiers').mockResolvedValue(
-        // @ts-ignore
-        Array.from({ length: 50 }, (_, i) => ({ identifier: `mcp-${i}` })),
-      );
-
-      const pageCount = await sitemap.getMcpPageCount();
-      expect(pageCount).toBe(1); // 50 items / 100 per page = 1 page
     });
 
     it('should return correct model page count', async () => {

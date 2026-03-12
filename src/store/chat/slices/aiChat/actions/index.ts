@@ -1,22 +1,39 @@
-import { StateCreator } from 'zustand/vanilla';
+import { type StateCreator } from 'zustand/vanilla';
 
-import { ChatStore } from '@/store/chat/store';
+import { type ChatStore } from '@/store/chat/store';
+import { flattenActions } from '@/store/utils/flattenActions';
 
-import { AIGenerateAction, generateAIChat } from './generateAIChat';
-import { ChatMemoryAction, chatMemory } from './memory';
-import { ChatRAGAction, chatRag } from './rag';
+import { type ConversationControlAction } from './conversationControl';
+import { ConversationControlActionImpl } from './conversationControl';
+import { type ConversationLifecycleAction } from './conversationLifecycle';
+import { ConversationLifecycleActionImpl } from './conversationLifecycle';
+import { type ChatMemoryAction } from './memory';
+import { ChatMemoryActionImpl } from './memory';
+import { type StreamingExecutorAction } from './streamingExecutor';
+import { StreamingExecutorActionImpl } from './streamingExecutor';
+import { type StreamingStatesAction } from './streamingStates';
+import { StreamingStatesActionImpl } from './streamingStates';
 
-export interface ChatAIChatAction extends ChatRAGAction, ChatMemoryAction, AIGenerateAction {
-  /**/
-}
+export type ChatAIChatAction = ChatMemoryAction &
+  ConversationLifecycleAction &
+  ConversationControlAction &
+  StreamingExecutorAction &
+  StreamingStatesAction;
 
 export const chatAiChat: StateCreator<
   ChatStore,
   [['zustand/devtools', never]],
   [],
   ChatAIChatAction
-> = (...params) => ({
-  ...chatRag(...params),
-  ...generateAIChat(...params),
-  ...chatMemory(...params),
-});
+> = (
+  ...params: Parameters<
+    StateCreator<ChatStore, [['zustand/devtools', never]], [], ChatAIChatAction>
+  >
+) =>
+  flattenActions<ChatAIChatAction>([
+    new ChatMemoryActionImpl(...params),
+    new ConversationLifecycleActionImpl(...params),
+    new ConversationControlActionImpl(...params),
+    new StreamingExecutorActionImpl(...params),
+    new StreamingStatesActionImpl(...params),
+  ]);

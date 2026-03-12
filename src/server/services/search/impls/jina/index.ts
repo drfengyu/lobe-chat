@@ -1,11 +1,14 @@
+import {
+  type SearchParams,
+  type UniformSearchResponse,
+  type UniformSearchResult,
+} from '@lobechat/types';
 import { TRPCError } from '@trpc/server';
 import debug from 'debug';
 import urlJoin from 'url-join';
 
-import { SearchParams, UniformSearchResponse, UniformSearchResult } from '@/types/tool/search';
-
-import { SearchServiceImpl } from '../type';
-import { JinaSearchParameters, JinaResponse } from './type';
+import { type SearchServiceImpl } from '../type';
+import { type JinaResponse, type JinaSearchParameters } from './type';
 
 const log = debug('lobe-search:Jina');
 
@@ -27,7 +30,7 @@ export class JinaImpl implements SearchServiceImpl {
     log('Starting Jina query with query: "%s", params: %o', query, params);
     const endpoint = urlJoin(this.baseUrl, '/');
 
-    let body: JinaSearchParameters = {
+    const body: JinaSearchParameters = {
       q: query,
     };
 
@@ -35,7 +38,7 @@ export class JinaImpl implements SearchServiceImpl {
 
     let response: Response;
     const startAt = Date.now();
-    let costTime = 0;
+    let costTime: number;
     try {
       log('Sending request to endpoint: %s', endpoint);
       response = await fetch(endpoint, {
@@ -93,7 +96,7 @@ export class JinaImpl implements SearchServiceImpl {
 
       return {
         costTime,
-        query: query,
+        query,
         resultNumbers: mappedResults.length,
         results: mappedResults,
       };

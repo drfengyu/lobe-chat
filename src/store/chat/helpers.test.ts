@@ -1,9 +1,10 @@
+import {
+  type LobeAgentChatConfig,
+  type OpenAIChatMessage,
+  type UIChatMessage,
+} from '@lobechat/types';
 import { describe, expect, it, vi } from 'vitest';
 
-import { LobeAgentChatConfig, LobeAgentConfig } from '@/types/agent';
-import { ChatMessage } from '@/types/message';
-import { OpenAIChatMessage } from '@/types/openai/chat';
-import { encodeAsync } from '@/utils/tokenizer';
 import * as tokenizerObj from '@/utils/tokenizer';
 
 import { chatHelpers } from './helpers';
@@ -48,7 +49,7 @@ describe('chatHelpers', () => {
     const messages = [
       { id: '1', content: 'Hello' },
       { id: '2', content: 'World' },
-    ] as ChatMessage[];
+    ] as UIChatMessage[];
 
     it('finds a message by id', () => {
       const message = chatHelpers.getMessageById(messages, '1');
@@ -71,7 +72,7 @@ describe('chatHelpers', () => {
       { id: '1', content: 'First' },
       { id: '2', content: 'Second' },
       { id: '3', content: 'Third' },
-    ] as ChatMessage[];
+    ] as UIChatMessage[];
 
     it('returns all messages if history is disabled', () => {
       const config = { enableHistoryCount: false, historyCount: undefined } as LobeAgentChatConfig;

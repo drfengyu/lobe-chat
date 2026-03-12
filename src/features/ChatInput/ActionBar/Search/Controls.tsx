@@ -1,37 +1,39 @@
-import { Icon } from '@lobehub/ui';
+import { Center, Flexbox, Icon } from '@lobehub/ui';
 import { GlobeOffIcon } from '@lobehub/ui/icons';
 import { Divider } from 'antd';
-import { createStyles } from 'antd-style';
-import { LucideIcon, SparkleIcon } from 'lucide-react';
-import { memo } from 'react';
+import { createStaticStyles, cssVar, cx } from 'antd-style';
+import { type LucideIcon } from 'lucide-react';
+import { SparkleIcon } from 'lucide-react';
+import { memo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Center, Flexbox } from 'react-layout-kit';
 
 import { useAgentStore } from '@/store/agent';
-import { agentChatConfigSelectors, agentSelectors } from '@/store/agent/slices/chat';
+import { agentByIdSelectors, chatConfigByIdSelectors } from '@/store/agent/selectors';
 import { aiModelSelectors, aiProviderSelectors, useAiInfraStore } from '@/store/aiInfra';
-import { SearchMode } from '@/types/search';
+import { type SearchMode } from '@/types/search';
 
+import { useAgentId } from '../../hooks/useAgentId';
+import { useUpdateAgentConfig } from '../../hooks/useUpdateAgentConfig';
 import FCSearchModel from './FCSearchModel';
 import ModelBuiltinSearch from './ModelBuiltinSearch';
 
-const useStyles = createStyles(({ css, token }) => ({
+const styles = createStaticStyles(({ css }) => ({
   active: css`
-    background: ${token.colorFillTertiary};
+    background: ${cssVar.colorFillTertiary};
   `,
   check: css`
     margin-inline-start: 12px;
     font-size: 16px;
-    color: ${token.colorPrimary};
+    color: ${cssVar.colorPrimary};
   `,
   description: css`
     font-size: 12px;
-    color: ${token.colorTextDescription};
+    color: ${cssVar.colorTextDescription};
   `,
   icon: css`
-    border: 1px solid ${token.colorFillTertiary};
-    border-radius: ${token.borderRadius}px;
-    background: ${token.colorBgElevated};
+    border: 1px solid ${cssVar.colorFillTertiary};
+    border-radius: ${cssVar.borderRadius};
+    background: ${cssVar.colorBgElevated};
   `,
   option: css`
     cursor: pointer;
@@ -39,18 +41,18 @@ const useStyles = createStyles(({ css, token }) => ({
     width: 100%;
     padding-block: 8px;
     padding-inline: 8px;
-    border-radius: ${token.borderRadius}px;
+    border-radius: ${cssVar.borderRadius};
 
     transition: background-color 0.2s;
 
     &:hover {
-      background: ${token.colorFillTertiary};
+      background: ${cssVar.colorFillTertiary};
     }
   `,
   title: css`
     font-size: 14px;
     font-weight: 500;
-    color: ${token.colorText};
+    color: ${cssVar.colorText};
   `,
 }));
 
@@ -63,18 +65,16 @@ interface NetworkOption {
 }
 
 const Item = memo<NetworkOption>(({ value, description, icon, label }) => {
-  const { cx, styles } = useStyles();
-  const [mode, updateAgentChatConfig] = useAgentStore((s) => [
-    agentChatConfigSelectors.agentSearchMode(s),
-    s.updateAgentChatConfig,
-  ]);
+  const agentId = useAgentId();
+  const { updateAgentChatConfig } = useUpdateAgentConfig();
+  const mode = useAgentStore((s) => chatConfigByIdSelectors.getSearchModeById(agentId)(s));
 
   return (
     <Flexbox
+      horizontal
       align={'flex-start'}
       className={cx(styles.option, mode === value && styles.active)}
       gap={12}
-      horizontal
       key={value}
       onClick={async () => {
         await updateAgentChatConfig({ searchMode: value });
@@ -93,9 +93,14 @@ const Item = memo<NetworkOption>(({ value, description, icon, label }) => {
 
 const Controls = memo(() => {
   const { t } = useTranslation('chat');
-  const [model, provider] = useAgentStore((s) => [
-    agentSelectors.currentAgentModel(s),
-    agentSelectors.currentAgentModelProvider(s),
+  const agentId = useAgentId();
+  const { updateAgentChatConfig } = useUpdateAgentConfig();
+
+  const [model, provider, useModelBuiltinSearch, searchMode] = useAgentStore((s) => [
+    agentByIdSelectors.getAgentModelById(agentId)(s),
+    agentByIdSelectors.getAgentModelProviderById(agentId)(s),
+    chatConfigByIdSelectors.getUseModelBuiltinSearchById(agentId)(s),
+    chatConfigByIdSelectors.getChatConfigById(agentId)(s).searchMode,
   ]);
 
   const supportFC = useAiInfraStore(aiModelSelectors.isModelSupportToolUse(model, provider));
@@ -105,24 +110,53 @@ const Controls = memo(() => {
   const isModelHasBuiltinSearchConfig = useAiInfraStore(
     aiModelSelectors.isModelHasBuiltinSearchConfig(model, provider),
   );
+  const isModelBuiltinSearchInternal = useAiInfraStore(
+    aiModelSelectors.isModelBuiltinSearchInternal(model, provider),
+  );
+  const modelBuiltinSearchImpl = useAiInfraStore(
+    aiModelSelectors.modelBuiltinSearchImpl(model, provider),
+  );
 
-  const options: NetworkOption[] = [
-    {
-      description: t('search.mode.off.desc'),
-      icon: GlobeOffIcon,
-      label: t('search.mode.off.title'),
-      value: 'off',
-    },
-    {
-      description: t('search.mode.auto.desc'),
-      icon: SparkleIcon,
-      label: t('search.mode.auto.title'),
-      value: 'auto',
-    },
-  ];
+  useEffect(() => {
+    if (isModelBuiltinSearchInternal && (searchMode ?? 'auto') === 'off') {
+      updateAgentChatConfig({ searchMode: 'auto' });
+    }
+  }, [isModelBuiltinSearchInternal, searchMode, updateAgentChatConfig]);
 
-  const showDivider = isModelHasBuiltinSearchConfig || !supportFC;
-  const showModelBuiltinSearch = isModelHasBuiltinSearchConfig || isProviderHasBuiltinSearchConfig;
+  const options: NetworkOption[] = isModelBuiltinSearchInternal
+    ? [
+        {
+          description: t('search.mode.auto.desc'),
+          icon: SparkleIcon,
+          label: t('search.mode.auto.title'),
+          value: 'auto',
+        },
+      ]
+    : [
+        {
+          description: t('search.mode.off.desc'),
+          icon: GlobeOffIcon,
+          label: t('search.mode.off.title'),
+          value: 'off',
+        },
+        {
+          description: t('search.mode.auto.desc'),
+          icon: SparkleIcon,
+          label: t('search.mode.auto.title'),
+          value: 'auto',
+        },
+      ];
+
+  const showModelBuiltinSearch =
+    searchMode !== 'off' &&
+    !isModelBuiltinSearchInternal &&
+    (isModelHasBuiltinSearchConfig || isProviderHasBuiltinSearchConfig);
+
+  const showFCSearchModel =
+    !supportFC &&
+    (!modelBuiltinSearchImpl || (!isModelBuiltinSearchInternal && !useModelBuiltinSearch));
+
+  const showDivider = showModelBuiltinSearch || showFCSearchModel;
 
   return (
     <Flexbox gap={4}>
@@ -131,7 +165,7 @@ const Controls = memo(() => {
       ))}
       {showDivider && <Divider style={{ margin: 0 }} />}
       {showModelBuiltinSearch && <ModelBuiltinSearch />}
-      {!supportFC && <FCSearchModel />}
+      {showFCSearchModel && <FCSearchModel />}
     </Flexbox>
   );
 });

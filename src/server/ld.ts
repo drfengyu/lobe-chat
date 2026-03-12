@@ -1,11 +1,11 @@
-import { isString } from 'lodash-es';
+import { BRANDING_EMAIL, BRANDING_NAME, SOCIAL_URL } from '@lobechat/business-const';
+import { isString } from 'es-toolkit/compat';
 import qs from 'query-string';
 import urlJoin from 'url-join';
 
-import { BRANDING_EMAIL, BRANDING_NAME, SOCIAL_URL } from '@/const/branding';
 import { DEFAULT_LANG } from '@/const/locale';
 import { OFFICIAL_SITE, OFFICIAL_URL } from '@/const/url';
-import { Locales } from '@/locales/resources';
+import { type Locales } from '@/locales/resources';
 import { getCanonicalUrl } from '@/server/utils/url';
 
 import pkg from '../../package.json';
@@ -22,7 +22,7 @@ export const AUTHOR_LIST = {
     avatar: 'https://avatars.githubusercontent.com/u/17870709?v=4',
     desc: 'Founder, Design Engineer',
     name: 'CanisMinor',
-    url: 'https://github.com/arvinxx',
+    url: 'https://github.com/canisminor1990',
   },
   lobehub: {
     avatar: 'https://avatars.githubusercontent.com/u/131470832?v=4',
@@ -34,7 +34,7 @@ export const AUTHOR_LIST = {
 
 export class Ld {
   generate({
-    image = '/og/cover.png',
+    image = '/og/og.webp',
     article,
     url,
     title,
@@ -87,14 +87,15 @@ export class Ld {
     return {
       '@id': this.getId(OFFICIAL_URL, '#organization'),
       '@type': 'Organization',
-      'alternateName': 'LobeChat',
+      'alternateName': 'LobeHub',
       'contactPoint': {
         '@type': 'ContactPoint',
         'contactType': 'customer support',
         'email': BRANDING_EMAIL.support,
       },
       'description':
-        'We are a group of e/acc design-engineers, hoping to provide modern design components and tools for AIGC, and creating a technology-driven forum, fostering knowledge interaction and the exchange of ideas that may culminate in mutual inspiration and collaborative innovation.',
+        'Agent teammates that grow with you\n' +
+        'LobeHub is a work-and-lifestyle space to find, build, and collaborate with agent teams that grow with you.',
       'email': BRANDING_EMAIL.business,
       'founders': [this.getAuthors(['arvinxx']), this.getAuthors(['canisminor'])],
       'image': urlJoin(OFFICIAL_SITE, '/icon-512x512.png'),
@@ -255,7 +256,7 @@ export class Ld {
         '@id': this.getId(fixedUrl, '#primaryimage'),
       },
       'inLanguage': locale,
-      'keywords': tags?.join(' ') || 'LobeHub LobeChat',
+      'keywords': tags?.join(' ') || 'LobeHub',
       'mainEntityOfPage': fixedUrl,
       'name': title,
       'publisher': {

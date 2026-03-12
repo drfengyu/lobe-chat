@@ -1,66 +1,72 @@
-/* eslint-disable sort-keys-fix/sort-keys-fix */
 import { z } from 'zod';
 
+// Define a union type for feature flag values: either boolean or array of user IDs
+const FeatureFlagValue = z.union([z.boolean(), z.array(z.string())]);
+
 export const FeatureFlagsSchema = z.object({
-  /**
-   * Enable WebRTC sync
-   */
-  webrtc_sync: z.boolean().optional(),
-  check_updates: z.boolean().optional(),
-  pin_list: z.boolean().optional(),
+  check_updates: FeatureFlagValue.optional(),
 
   // settings
-  language_model_settings: z.boolean().optional(),
-  provider_settings: z.boolean().optional(),
+  provider_settings: FeatureFlagValue.optional(),
 
-  openai_api_key: z.boolean().optional(),
-  openai_proxy_url: z.boolean().optional(),
+  openai_api_key: FeatureFlagValue.optional(),
+  openai_proxy_url: FeatureFlagValue.optional(),
 
-  create_session: z.boolean().optional(),
-  edit_agent: z.boolean().optional(),
+  // profile
+  api_key_manage: FeatureFlagValue.optional(),
+  edit_agent: FeatureFlagValue.optional(),
 
-  plugins: z.boolean().optional(),
-  dalle: z.boolean().optional(),
-  speech_to_text: z.boolean().optional(),
-  token_counter: z.boolean().optional(),
+  ai_image: FeatureFlagValue.optional(),
+  speech_to_text: FeatureFlagValue.optional(),
+  token_counter: FeatureFlagValue.optional(),
 
-  welcome_suggest: z.boolean().optional(),
-  changelog: z.boolean().optional(),
+  welcome_suggest: FeatureFlagValue.optional(),
+  changelog: FeatureFlagValue.optional(),
 
-  clerk_sign_up: z.boolean().optional(),
+  market: FeatureFlagValue.optional(),
+  knowledge_base: FeatureFlagValue.optional(),
 
-  market: z.boolean().optional(),
-  knowledge_base: z.boolean().optional(),
-
-  rag_eval: z.boolean().optional(),
+  rag_eval: FeatureFlagValue.optional(),
 
   // internal flag
-  cloud_promotion: z.boolean().optional(),
+  cloud_promotion: FeatureFlagValue.optional(),
 
   // the flags below can only be used with commercial license
   // if you want to use it in the commercial usage
   // please contact us for more information: hello@lobehub.com
-  commercial_hide_github: z.boolean().optional(),
-  commercial_hide_docs: z.boolean().optional(),
+  commercial_hide_github: FeatureFlagValue.optional(),
+  commercial_hide_docs: FeatureFlagValue.optional(),
 });
 
 export type IFeatureFlags = z.infer<typeof FeatureFlagsSchema>;
 
-export const DEFAULT_FEATURE_FLAGS: IFeatureFlags = {
-  webrtc_sync: false,
-  pin_list: false,
+/**
+ * Evaluate a feature flag value against a user ID
+ * @param flagValue - The feature flag value (boolean or array of user IDs)
+ * @param userId - The current user ID
+ * @returns boolean indicating if the feature is enabled for the user
+ */
+export const evaluateFeatureFlag = (
+  flagValue: boolean | string[] | undefined,
+  userId?: string,
+): boolean | undefined => {
+  if (typeof flagValue === 'boolean') return flagValue;
 
-  language_model_settings: true,
+  if (Array.isArray(flagValue)) {
+    return userId ? flagValue.includes(userId) : false;
+  }
+};
+
+export const DEFAULT_FEATURE_FLAGS: IFeatureFlags = {
   provider_settings: true,
 
   openai_api_key: true,
   openai_proxy_url: true,
 
-  create_session: true,
+  api_key_manage: false,
   edit_agent: true,
 
-  plugins: true,
-  dalle: true,
+  ai_image: true,
 
   check_updates: true,
   welcome_suggest: true,
@@ -68,8 +74,6 @@ export const DEFAULT_FEATURE_FLAGS: IFeatureFlags = {
 
   knowledge_base: true,
   rag_eval: false,
-
-  clerk_sign_up: true,
 
   cloud_promotion: false,
 
@@ -84,37 +88,33 @@ export const DEFAULT_FEATURE_FLAGS: IFeatureFlags = {
   commercial_hide_docs: false,
 };
 
-export const mapFeatureFlagsEnvToState = (config: IFeatureFlags) => {
+export const mapFeatureFlagsEnvToState = (config: IFeatureFlags, userId?: string) => {
   return {
-    enableWebrtc: config.webrtc_sync,
-    isAgentEditable: config.edit_agent,
+    isAgentEditable: evaluateFeatureFlag(config.edit_agent, userId),
+    showProvider: evaluateFeatureFlag(config.provider_settings, userId),
 
-    showCreateSession: config.create_session,
-    showLLM: config.language_model_settings,
-    showProvider: config.provider_settings,
-    showPinList: config.pin_list,
+    showOpenAIApiKey: evaluateFeatureFlag(config.openai_api_key, userId),
+    showOpenAIProxyUrl: evaluateFeatureFlag(config.openai_proxy_url, userId),
 
-    showOpenAIApiKey: config.openai_api_key,
-    showOpenAIProxyUrl: config.openai_proxy_url,
+    showApiKeyManage: evaluateFeatureFlag(config.api_key_manage, userId),
 
-    enablePlugins: config.plugins,
-    showDalle: config.dalle,
-    showChangelog: config.changelog,
+    showAiImage: evaluateFeatureFlag(config.ai_image, userId),
+    showChangelog: evaluateFeatureFlag(config.changelog, userId),
 
-    enableCheckUpdates: config.check_updates,
-    showWelcomeSuggest: config.welcome_suggest,
+    enableCheckUpdates: evaluateFeatureFlag(config.check_updates, userId),
+    showWelcomeSuggest: evaluateFeatureFlag(config.welcome_suggest, userId),
 
-    enableClerkSignUp: config.clerk_sign_up,
+    enableKnowledgeBase: evaluateFeatureFlag(config.knowledge_base, userId),
+    enableRAGEval: evaluateFeatureFlag(config.rag_eval, userId),
 
-    enableKnowledgeBase: config.knowledge_base,
-    enableRAGEval: config.rag_eval,
+    showCloudPromotion: evaluateFeatureFlag(config.cloud_promotion, userId),
 
-    showCloudPromotion: config.cloud_promotion,
+    showMarket: evaluateFeatureFlag(config.market, userId),
+    enableSTT: evaluateFeatureFlag(config.speech_to_text, userId),
 
-    showMarket: config.market,
-    enableSTT: config.speech_to_text,
-
-    hideGitHub: config.commercial_hide_github,
-    hideDocs: config.commercial_hide_docs,
+    hideGitHub: evaluateFeatureFlag(config.commercial_hide_github, userId),
+    hideDocs: evaluateFeatureFlag(config.commercial_hide_docs, userId),
   };
 };
+
+export type IFeatureFlagsState = ReturnType<typeof mapFeatureFlagsEnvToState>;

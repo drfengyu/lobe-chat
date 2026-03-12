@@ -1,5 +1,6 @@
-import { CrawlImplType, crawlImpls } from './crawImpl';
-import { CrawlUrlRule } from './type';
+import type { CrawlImplType } from './crawImpl';
+import { crawlImpls } from './crawImpl';
+import type { CrawlUniformResult, CrawlUrlRule } from './type';
 import { crawUrlRules } from './urlRules';
 import { applyUrlRules } from './utils/appUrlRules';
 
@@ -19,8 +20,8 @@ export class Crawler {
   }
 
   /**
-   * 爬取网页内容
-   * @param options 爬取选项
+   * Crawl webpage content
+   * @param options Crawl options
    */
   async crawl({
     url,
@@ -30,15 +31,15 @@ export class Crawler {
     filterOptions?: CrawlUrlRule['filterOptions'];
     impls?: CrawlImplType[];
     url: string;
-  }) {
-    // 应用URL规则
+  }): Promise<CrawlUniformResult> {
+    // Apply URL rules
     const {
       transformedUrl,
       filterOptions: ruleFilterOptions,
       impls: ruleImpls,
     } = applyUrlRules(url, crawUrlRules);
 
-    // 合并用户提供的过滤选项和规则中的过滤选项，用户选项优先
+    // Merge user-provided filter options and rule filter options, user options take priority
     const mergedFilterOptions = {
       ...ruleFilterOptions,
       ...userFilterOptions,
@@ -53,18 +54,23 @@ export class Crawler {
       ? (userImpls.filter((impl) => Object.keys(crawlImpls).includes(impl)) as CrawlImplType[])
       : systemImpls;
 
-    //   按照内置的实现顺序依次尝试
+    // Try each implementation in the built-in order
     for (const impl of finalImpls) {
       try {
         const res = await crawlImpls[impl](transformedUrl, { filterOptions: mergedFilterOptions });
 
-        if (res && res.content && res.content?.length > 100)
+        if (res && res.content && res.content.length > 100) {
           return {
             crawler: impl,
             data: res,
             originalUrl: url,
             transformedUrl: transformedUrl !== url ? transformedUrl : undefined,
           };
+        }
+
+        finalError = new Error(`${impl} returned empty or short content`);
+        finalError.name = 'EmptyCrawlResultError';
+        finalCrawler = impl;
       } catch (error) {
         console.error(error);
         finalError = error as Error;
@@ -76,10 +82,10 @@ export class Crawler {
     const errorMessage = finalError?.message;
 
     return {
-      crawler: finalCrawler,
+      crawler: finalCrawler || finalImpls.at(-1) || 'unknown',
       data: {
         content: `Fail to crawl the page. Error type: ${errorType}, error message: ${errorMessage}`,
-        errorMessage: errorMessage,
+        errorMessage,
         errorType,
       },
       originalUrl: url,

@@ -1,11 +1,14 @@
+import {
+  type SearchParams,
+  type UniformSearchResponse,
+  type UniformSearchResult,
+} from '@lobechat/types';
 import { TRPCError } from '@trpc/server';
 import debug from 'debug';
 import urlJoin from 'url-join';
 
-import { SearchParams, UniformSearchResponse, UniformSearchResult } from '@/types/tool/search';
-
-import { SearchServiceImpl } from '../type';
-import { BochaSearchParameters, BochaResponse } from './type';
+import { type SearchServiceImpl } from '../type';
+import { type BochaResponse, type BochaSearchParameters } from './type';
 
 const log = debug('lobe-search:Bocha');
 
@@ -40,11 +43,11 @@ export class BochaImpl implements SearchServiceImpl {
       summary: true,
     };
 
-    let body: BochaSearchParameters = {
+    const body: BochaSearchParameters = {
       ...defaultQueryParams,
       freshness:
         params?.searchTimeRange && params.searchTimeRange !== 'anytime'
-          ? timeRangeMapping[params.searchTimeRange as keyof typeof timeRangeMapping] ?? undefined
+          ? (timeRangeMapping[params.searchTimeRange as keyof typeof timeRangeMapping] ?? undefined)
           : undefined,
     };
 
@@ -52,7 +55,7 @@ export class BochaImpl implements SearchServiceImpl {
 
     let response: Response;
     const startAt = Date.now();
-    let costTime = 0;
+    let costTime: number;
     try {
       log('Sending request to endpoint: %s', endpoint);
       response = await fetch(endpoint, {
@@ -108,7 +111,7 @@ export class BochaImpl implements SearchServiceImpl {
 
       return {
         costTime,
-        query: query,
+        query,
         resultNumbers: mappedResults.length,
         results: mappedResults,
       };

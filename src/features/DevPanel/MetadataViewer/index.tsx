@@ -1,16 +1,17 @@
 'use client';
 
-import { Tabs } from '@lobehub/ui';
-import { createStyles } from 'antd-style';
+import { Flexbox, Tabs } from '@lobehub/ui';
+import { createStaticStyles } from 'antd-style';
 import { memo, useState } from 'react';
-import { Flexbox } from 'react-layout-kit';
 
 import Header from '../features/Header';
 import Ld from './Ld';
 import MetaData from './MetaData';
 import Og from './Og';
 
-const useStyles = createStyles(({ css, prefixCls }) => ({
+const prefixCls = 'ant';
+
+const styles = createStaticStyles(({ css }) => ({
   container: css`
     * {
       font-size: 12px;
@@ -28,7 +29,6 @@ enum Tab {
 }
 
 const MetadataViewer = memo(() => {
-  const { styles } = useStyles();
   const [active, setActive] = useState<Tab>(Tab.Og);
   return (
     <Flexbox
@@ -41,8 +41,9 @@ const MetadataViewer = memo(() => {
         style={{ paddingInlineStart: 0 }}
         title={
           <Tabs
-            activeKey={active}
             compact
+            activeKey={active}
+            style={{ margin: 16 }}
             items={[
               {
                 key: Tab.Og,
@@ -58,7 +59,6 @@ const MetadataViewer = memo(() => {
               },
             ]}
             onChange={(v) => setActive(v as Tab)}
-            style={{ margin: 16 }}
           />
         }
       />

@@ -1,18 +1,20 @@
 /**
- * 快捷键操作类型枚举
+ * Shortcut action type enum
  */
 export const ShortcutActionEnum = {
+  openSettings: 'openSettings',
   /**
-   * 显示/隐藏主窗口
+   * Show/hide main window
    */
-  toggleMainWindow: 'toggleMainWindow',
+  showApp: 'showApp',
 } as const;
 
 export type ShortcutActionType = (typeof ShortcutActionEnum)[keyof typeof ShortcutActionEnum];
 
 /**
- * 默认快捷键配置
+ * Default shortcut configuration
  */
 export const DEFAULT_SHORTCUTS_CONFIG: Record<ShortcutActionType, string> = {
-  [ShortcutActionEnum.toggleMainWindow]: 'CommandOrControl+E',
+  [ShortcutActionEnum.showApp]: 'Control+E',
+  [ShortcutActionEnum.openSettings]: 'CommandOrControl+,',
 };

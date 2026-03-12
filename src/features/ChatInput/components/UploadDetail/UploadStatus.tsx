@@ -1,13 +1,12 @@
 import { CheckCircleFilled } from '@ant-design/icons';
-import { Icon, Text } from '@lobehub/ui';
+import { Flexbox, Icon, Text } from '@lobehub/ui';
 import { Progress } from 'antd';
-import { useTheme } from 'antd-style';
+import { cssVar } from 'antd-style';
 import { Loader2Icon } from 'lucide-react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Flexbox } from 'react-layout-kit';
 
-import { FileUploadState, FileUploadStatus } from '@/types/files/upload';
+import { type FileUploadState, type FileUploadStatus } from '@/types/files/upload';
 import { formatSize } from '@/utils/format';
 
 interface UploadStateProps {
@@ -17,15 +16,14 @@ interface UploadStateProps {
 }
 
 const UploadStatus = memo<UploadStateProps>(({ status, size, uploadState }) => {
-  const theme = useTheme();
   const { t } = useTranslation('chat');
 
   switch (status) {
     default:
     case 'pending': {
       return (
-        <Flexbox align={'center'} gap={4} horizontal>
-          <Icon icon={Loader2Icon} size={12} spin />
+        <Flexbox horizontal align={'center'} gap={4}>
+          <Icon spin icon={Loader2Icon} size={12} />
           <Text style={{ fontSize: 12 }} type={'secondary'}>
             {t('upload.preview.status.pending')}
           </Text>
@@ -35,10 +33,10 @@ const UploadStatus = memo<UploadStateProps>(({ status, size, uploadState }) => {
 
     case 'uploading': {
       return (
-        <Flexbox align={'center'} gap={4} horizontal>
+        <Flexbox horizontal align={'center'} gap={4}>
           <Progress percent={uploadState?.progress} size={14} type="circle" />
           <Text style={{ fontSize: 12 }} type={'secondary'}>
-            {formatSize(size * ((uploadState?.progress || 0) / 100), 0)} / {formatSize(size)}
+            {formatSize(size * ((uploadState?.progress || 0) / 100), 0)}
           </Text>
         </Flexbox>
       );
@@ -46,7 +44,7 @@ const UploadStatus = memo<UploadStateProps>(({ status, size, uploadState }) => {
 
     case 'processing': {
       return (
-        <Flexbox align={'center'} gap={4} horizontal>
+        <Flexbox horizontal align={'center'} gap={4}>
           <Progress percent={uploadState?.progress} size={14} type="circle" />
           <Text style={{ fontSize: 12 }} type={'secondary'}>
             {formatSize(size)}
@@ -57,8 +55,8 @@ const UploadStatus = memo<UploadStateProps>(({ status, size, uploadState }) => {
 
     case 'success': {
       return (
-        <Flexbox align={'center'} gap={4} horizontal>
-          <CheckCircleFilled style={{ color: theme.colorSuccess, fontSize: 12 }} />
+        <Flexbox horizontal align={'center'} gap={4}>
+          <CheckCircleFilled style={{ color: cssVar.colorSuccess, fontSize: 12 }} />
           <Text style={{ fontSize: 12 }} type={'secondary'}>
             {formatSize(size)}
           </Text>

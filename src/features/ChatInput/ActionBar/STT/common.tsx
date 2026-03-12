@@ -1,18 +1,18 @@
-import { ActionIcon, Alert, Button, Dropdown, Highlighter } from '@lobehub/ui';
-import { createStyles } from 'antd-style';
+import { type ChatMessageError } from '@lobechat/types';
+import { Alert, Button, Flexbox, Highlighter } from '@lobehub/ui';
+import { createStaticStyles, cssVar } from 'antd-style';
 import { Mic, MicOff } from 'lucide-react';
 import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Flexbox } from 'react-layout-kit';
 
-import { ChatMessageError } from '@/types/message';
+import Action from '../components/Action';
 
-const useStyles = createStyles(({ css, token }) => ({
+const styles = createStaticStyles(({ css }) => ({
   recording: css`
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: ${token.colorError};
+    background: ${cssVar.colorError};
   `,
 }));
 
@@ -41,7 +41,6 @@ const CommonSTT = memo<{
     desc,
   }) => {
     const { t } = useTranslation('chat');
-    const { styles } = useStyles();
     const [dropdownOpen, setDropdownOpen] = useState(false);
 
     const handleDropdownVisibleChange = (open: boolean) => {
@@ -49,43 +48,50 @@ const CommonSTT = memo<{
     };
 
     return (
-      <Dropdown
-        menu={{
-          // @ts-expect-error 等待 antd 修复
-          activeKey: 'time',
-          items: [
-            {
-              key: 'title',
-              label: (
-                <Flexbox>
-                  <div style={{ fontWeight: 'bolder' }}>{t('stt.action')}</div>
-                </Flexbox>
-              ),
-            },
-            {
-              key: 'time',
-              label: (
-                <Flexbox align={'center'} gap={8} horizontal>
-                  <div className={styles.recording} />
-                  {time > 0 ? formattedTime : t(isRecording ? 'stt.loading' : 'stt.prettifying')}
-                </Flexbox>
-              ),
-            },
-          ],
-        }}
-        onOpenChange={handleDropdownVisibleChange}
-        open={dropdownOpen || !!error || isRecording || isLoading}
-        placement={mobile ? 'topRight' : 'top'}
-        popupRender={
-          error
+      <Action
+        active={isRecording}
+        icon={isLoading ? MicOff : Mic}
+        title={dropdownOpen ? undefined : desc}
+        variant={mobile ? 'outlined' : 'borderless'}
+        dropdown={{
+          menu: {
+            // @ts-expect-error 等待 antd 修复
+            activeKey: 'time',
+            items: [
+              {
+                key: 'title',
+                label: (
+                  <Flexbox>
+                    <div style={{ fontWeight: 'bolder' }}>{t('stt.action')}</div>
+                  </Flexbox>
+                ),
+              },
+              {
+                key: 'time',
+                label: (
+                  <Flexbox horizontal align={'center'} gap={8}>
+                    <div className={styles.recording} />
+                    {time > 0 ? formattedTime : t(isRecording ? 'stt.loading' : 'stt.prettifying')}
+                  </Flexbox>
+                ),
+              },
+            ],
+          },
+          onOpenChange: handleDropdownVisibleChange,
+          open: dropdownOpen || !!error || isRecording || isLoading,
+          placement: mobile ? 'topRight' : 'top',
+          popupRender: error
             ? () => (
                 <Alert
+                  closable
+                  style={{ alignItems: 'center' }}
+                  title={error.message}
+                  type="error"
                   action={
-                    <Button onClick={handleRetry} size={'small'} type={'primary'}>
+                    <Button size={'small'} type={'primary'} onClick={handleRetry}>
                       {t('retry', { ns: 'common' })}
                     </Button>
                   }
-                  closable
                   extra={
                     error.body && (
                       <Highlighter
@@ -97,29 +103,14 @@ const CommonSTT = memo<{
                       </Highlighter>
                     )
                   }
-                  message={error.message}
                   onClose={handleCloseError}
-                  style={{ alignItems: 'center' }}
-                  type="error"
                 />
               )
-            : undefined
-        }
-        trigger={['click']}
-      >
-        <ActionIcon
-          active={isRecording}
-          icon={isLoading ? MicOff : Mic}
-          onClick={handleTriggerStartStop}
-          size={mobile ? { blockSize: 36, size: 16 } : 22}
-          style={{ flex: 'none' }}
-          title={dropdownOpen ? '' : desc}
-          tooltipProps={{
-            placement: 'bottom',
-          }}
-          variant={mobile ? 'outlined' : 'borderless'}
-        />
-      </Dropdown>
+            : undefined,
+          trigger: 'click',
+        }}
+        onClick={handleTriggerStartStop}
+      />
     );
   },
 );

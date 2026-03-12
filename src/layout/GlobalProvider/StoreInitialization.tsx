@@ -1,42 +1,45 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { memo } from 'react';
+import { INBOX_SESSION_ID } from '@lobechat/const';
+import { lazy, memo, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createStoreUpdater } from 'zustand-utils';
 
-import { enableNextAuth } from '@/const/auth';
 import { useIsMobile } from '@/hooks/useIsMobile';
-import { useEnabledDataSync } from '@/hooks/useSyncData';
 import { useAgentStore } from '@/store/agent';
-import { useAiInfraStore } from '@/store/aiInfra';
 import { useGlobalStore } from '@/store/global';
-import { systemStatusSelectors } from '@/store/global/selectors';
 import { useServerConfigStore } from '@/store/serverConfig';
 import { serverConfigSelectors } from '@/store/serverConfig/selectors';
 import { useUserStore } from '@/store/user';
 import { authSelectors } from '@/store/user/selectors';
 
+import { useUserStateRedirect } from './useUserStateRedirect';
+
+const DeferredStoreInitialization = lazy(() => import('./DeferredStoreInitialization'));
+
 const StoreInitialization = memo(() => {
   // prefetch error ns to avoid don't show error content correctly
   useTranslation('error');
 
-  const router = useRouter();
-  const [isLogin, isSignedIn, useInitUserState] = useUserStore((s) => [
+  const [isLogin, useInitUserState] = useUserStore((s) => [
     authSelectors.isLogin(s),
-    s.isSignedIn,
     s.useInitUserState,
   ]);
 
   const { serverConfig } = useServerConfigStore();
 
-  const useInitSystemStatus = useGlobalStore((s) => s.useInitSystemStatus);
+  const [useInitSystemStatus, useCheckServerVersion] = useGlobalStore((s) => [
+    s.useInitSystemStatus,
+    s.useCheckServerVersion,
+  ]);
 
-  const useInitAgentStore = useAgentStore((s) => s.useInitInboxAgentStore);
-  const useInitAiProviderKeyVaults = useAiInfraStore((s) => s.useFetchAiProviderRuntimeState);
+  const useInitBuiltinAgent = useAgentStore((s) => s.useInitBuiltinAgent);
 
   // init the system preference
   useInitSystemStatus();
+
+  // check server version in desktop app
+  useCheckServerVersion();
 
   // fetch server config
   const useFetchServerConfig = useServerConfigStore((s) => s.useInitServerConfig);
@@ -51,35 +54,33 @@ const StoreInitialization = memo(() => {
    * The store function of `isLogin` will both consider the values of `enableAuth` and `isSignedIn`.
    * But during initialization, the value of `enableAuth` might be incorrect cause of the async fetch.
    * So we need to use `isSignedIn` only to determine whether request for the default agent config and user state.
+   *
+   * IMPORTANT: Explicitly convert to boolean to avoid passing null/undefined downstream,
+   * which would cause unnecessary API requests with invalid login state.
    */
-  const isDBInited = useGlobalStore(systemStatusSelectors.isDBInited);
-  const isLoginOnInit = isDBInited && (enableNextAuth ? isSignedIn : isLogin);
+  const isLoginOnInit = Boolean(isLogin);
 
-  // init inbox agent and default agent config
-  useInitAgentStore(isLoginOnInit, serverConfig.defaultAgent?.config);
+  // init inbox agent via builtin agent mechanism
+  useInitBuiltinAgent(INBOX_SESSION_ID, { isLogin: isLoginOnInit });
 
-  // init user provider key vaults
-  useInitAiProviderKeyVaults(isLoginOnInit);
+  const onUserStateSuccess = useUserStateRedirect();
 
   // init user state
   useInitUserState(isLoginOnInit, serverConfig, {
-    onSuccess: (state) => {
-      if (state.isOnboard === false) {
-        router.push('/onboard');
-      }
-    },
+    onSuccess: onUserStateSuccess,
   });
-
-  useEnabledDataSync();
 
   const useStoreUpdater = createStoreUpdater(useGlobalStore);
 
   const mobile = useIsMobile();
 
   useStoreUpdater('isMobile', mobile);
-  useStoreUpdater('router', router);
 
-  return null;
+  return (
+    <Suspense>
+      <DeferredStoreInitialization isLogin={isLoginOnInit} />
+    </Suspense>
+  );
 });
 
 export default StoreInitialization;

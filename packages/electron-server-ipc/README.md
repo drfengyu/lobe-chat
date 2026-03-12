@@ -1,54 +1,76 @@
 # @lobechat/electron-server-ipc
 
-LobeHub 的 Electron 应用与服务端之间的 IPC（进程间通信）模块，提供可靠的跨进程通信能力。
+IPC (Inter-Process Communication) module between LobeHub's Electron application and server, providing reliable cross-process communication capabilities.
 
-## 📝 简介
+## 📝 Introduction
 
-`@lobechat/electron-server-ipc` 是 LobeHub 桌面应用的核心组件，负责处理 Electron 主进程与 nextjs 服务端之间的通信。它提供了一套简单而健壮的 API，用于在不同进程间传递数据和执行远程方法调用。
+`@lobechat/electron-server-ipc` is a core component of LobeHub's desktop application, responsible for handling communication between the Electron main process and Next.js server. It provides a simple yet robust API for passing data and executing remote method calls across different processes.
 
-## 🛠️ 核心功能
+## 🛠️ Core Features
 
-- **可靠的 IPC 通信**: 基于 Socket 的通信机制，确保跨进程通信的稳定性和可靠性
-- **自动重连机制**: 客户端具备断线重连功能，提高应用稳定性
-- **类型安全**: 使用 TypeScript 提供完整的类型定义，确保 API 调用的类型安全
-- **跨平台支持**: 同时支持 Windows、macOS 和 Linux 平台
+- **Reliable IPC Communication**: Socket-based communication mechanism ensuring stability and reliability of cross-process communication
+- **Automatic Reconnection**: Client features automatic reconnection functionality to improve application stability
+- **Type Safety**: Uses TypeScript to provide complete type definitions, ensuring type safety for API calls
+- **Cross-Platform Support**: Supports Windows, macOS, and Linux platforms
 
-## 🧩 核心组件
+## 🧩 Core Components
 
-### IPC 服务端 (ElectronIPCServer)
+### IPC Server (ElectronIPCServer)
 
-负责监听客户端请求并响应，通常运行在 Electron 的主进程中：
+Responsible for listening to client requests and responding, typically runs in Electron's main process:
 
 ```typescript
 import { ElectronIPCEventHandler, ElectronIPCServer } from '@lobechat/electron-server-ipc';
 
-// 定义处理函数
+// Define handler functions
 const eventHandler: ElectronIPCEventHandler = {
   getDatabasePath: async () => {
     return '/path/to/database';
   },
-  // 其他处理函数...
+  // Other handler functions...
 };
 
-// 创建并启动服务器
+// Create and start server
 const server = new ElectronIPCServer(eventHandler);
 server.start();
 ```
 
-### IPC 客户端 (ElectronIpcClient)
+### IPC Client (ElectronIpcClient)
 
-负责连接到服务端并发送请求，通常在服务端（如 Next.js 服务）中使用：
+Responsible for connecting to the server and sending requests, typically used in the server (such as Next.js service):
 
 ```typescript
 import { ElectronIPCMethods, ElectronIpcClient } from '@lobechat/electron-server-ipc';
 
-// 创建客户端
+// Create client
 const client = new ElectronIpcClient();
 
-// 发送请求
+// Send request
 const dbPath = await client.sendRequest(ElectronIPCMethods.getDatabasePath);
 ```
 
-## 📌 说明
+## 🤝 Contribution
 
-这是 LobeHub 的内部模块 (`"private": true`)，专为 LobeHub 桌面应用设计，不作为独立包发布。
+IPC server implementations need to handle various communication scenarios and edge cases. We welcome community contributions to enhance reliability and functionality. You can participate in improvements through:
+
+### How to Contribute
+
+1. **Performance Optimization**: Improve IPC communication speed and reliability
+2. **Error Handling**: Enhance error recovery and reconnection mechanisms
+3. **New Features**: Add support for new IPC methods or communication patterns
+4. **Documentation**: Improve code documentation and usage examples
+
+### Contribution Process
+
+1. Fork the [LobeHub repository](https://github.com/lobehub/lobe-chat)
+2. Implement your improvements to the IPC server package
+3. Submit a Pull Request describing:
+
+- Performance improvements or new features
+- Testing methodology and results
+- Compatibility considerations
+- Usage examples
+
+## 📌 Note
+
+This is an internal module of LobeHub (`"private": true`), designed specifically for LobeHub desktop applications and not published as a standalone package.

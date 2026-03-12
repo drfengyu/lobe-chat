@@ -1,9 +1,10 @@
-import dynamic from 'next/dynamic';
-import { PropsWithChildren, memo } from 'react';
+import { type PropsWithChildren } from 'react';
+import { memo } from 'react';
 
 import { useModelHasContextWindowToken } from '@/hooks/useModelHasContextWindowToken';
+import dynamic from '@/libs/next/dynamic';
 import { useChatStore } from '@/store/chat';
-import { chatSelectors, threadSelectors } from '@/store/chat/selectors';
+import { displayMessageSelectors, threadSelectors } from '@/store/chat/selectors';
 
 const LargeTokenContent = dynamic(() => import('./TokenTag'), { ssr: false });
 
@@ -14,7 +15,7 @@ const Token = memo<PropsWithChildren>(({ children }) => {
 });
 
 export const MainToken = memo(() => {
-  const total = useChatStore(chatSelectors.mainAIChatsMessageString);
+  const total = useChatStore(displayMessageSelectors.mainAIChatsMessageString);
 
   return (
     <Token>

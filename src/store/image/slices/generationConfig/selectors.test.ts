@@ -1,12 +1,16 @@
+import {
+  type AIImageModelCard,
+  type ModelParamsSchema,
+  type RuntimeImageGenParams,
+} from 'model-bank';
+import { gptImage1ParamsSchema } from 'model-bank';
 import { describe, expect, it, vi } from 'vitest';
 
-import { gptImage1ParamsSchema } from '@/config/paramsSchemas/openai/gpt-image-1';
-import { ModelParamsSchema, RuntimeImageGenParams } from '@/libs/standard-parameters/meta-schema';
-import { ImageStore } from '@/store/image';
+import { type ImageStore } from '@/store/image';
 import { initialState } from '@/store/image/initialState';
-import { AIImageModelCard } from '@/types/aiModel';
 import { merge } from '@/utils/merge';
 
+import { DEFAULT_AI_IMAGE_MODEL, DEFAULT_AI_IMAGE_PROVIDER } from './initialState';
 import { imageGenerationConfigSelectors } from './selectors';
 
 // Mock external dependencies
@@ -58,7 +62,7 @@ describe('imageGenerationConfigSelectors', () => {
 
     it('should return the default model from initial state', () => {
       const result = imageGenerationConfigSelectors.model(initialStore);
-      expect(result).toBe('gpt-image-1'); // Default model from initialState
+      expect(result).toBe(DEFAULT_AI_IMAGE_MODEL);
     });
   });
 
@@ -71,7 +75,7 @@ describe('imageGenerationConfigSelectors', () => {
 
     it('should return the default provider from initial state', () => {
       const result = imageGenerationConfigSelectors.provider(initialStore);
-      expect(result).toBe('openai'); // Default provider from initialState
+      expect(result).toBe(DEFAULT_AI_IMAGE_PROVIDER);
     });
   });
 
@@ -99,7 +103,10 @@ describe('imageGenerationConfigSelectors', () => {
     it('should return the current parameters', () => {
       const state = merge(initialStore, { parameters: testParameters });
       const result = imageGenerationConfigSelectors.parameters(state);
-      expect(result).toEqual(testParameters);
+      // merge does deep merge, so result contains both default and test values
+      expect(result.prompt).toBe(testParameters.prompt);
+      expect(result.size).toBe(testParameters.size);
+      expect(result.imageUrls).toEqual(testParameters.imageUrls);
     });
 
     it('should return the default parameters from initial state', () => {
@@ -121,7 +128,10 @@ describe('imageGenerationConfigSelectors', () => {
     it('should return the current parametersSchema', () => {
       const state = merge(initialStore, { parametersSchema: testModelSchema });
       const result = imageGenerationConfigSelectors.parametersSchema(state);
-      expect(result).toEqual(testModelSchema);
+      // merge does deep merge, so result contains both default and test values
+      expect(result.prompt).toEqual(testModelSchema.prompt);
+      expect(result.size).toEqual(testModelSchema.size);
+      expect(result.imageUrls).toEqual(testModelSchema.imageUrls);
     });
 
     it('should return default parametersSchema when not explicitly overridden', () => {

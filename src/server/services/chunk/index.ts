@@ -1,8 +1,9 @@
-import { JWTPayload } from '@/const/auth';
+import { type LobeChatDatabase } from '@lobechat/database';
+
 import { AsyncTaskModel } from '@/database/models/asyncTask';
 import { FileModel } from '@/database/models/file';
-import { serverDB } from '@/database/server';
-import { ChunkContentParams, ContentChunk } from '@/server/modules/ContentChunk';
+import { type ChunkContentParams } from '@/server/modules/ContentChunk';
+import { ContentChunk } from '@/server/modules/ContentChunk';
 import { createAsyncCaller } from '@/server/routers/async';
 import {
   AsyncTaskError,
@@ -17,7 +18,7 @@ export class ChunkService {
   private fileModel: FileModel;
   private asyncTaskModel: AsyncTaskModel;
 
-  constructor(userId: string) {
+  constructor(serverDB: LobeChatDatabase, userId: string) {
     this.userId = userId;
 
     this.chunkClient = new ContentChunk();
@@ -30,7 +31,7 @@ export class ChunkService {
     return this.chunkClient.chunkContent(params);
   }
 
-  async asyncEmbeddingFileChunks(fileId: string, payload: JWTPayload) {
+  async asyncEmbeddingFileChunks(fileId: string) {
     const result = await this.fileModel.findById(fileId);
 
     if (!result) return;
@@ -43,7 +44,8 @@ export class ChunkService {
 
     await this.fileModel.update(fileId, { embeddingTaskId: asyncTaskId });
 
-    const asyncCaller = await createAsyncCaller({ jwtPayload: payload, userId: this.userId });
+    // Async router will read keyVaults from DB, no need to pass jwtPayload
+    const asyncCaller = await createAsyncCaller({ userId: this.userId });
 
     // trigger embedding task asynchronously
     try {
@@ -66,7 +68,7 @@ export class ChunkService {
   /**
    * parse file to chunks with async task
    */
-  async asyncParseFileToChunks(fileId: string, payload: JWTPayload, skipExist?: boolean) {
+  async asyncParseFileToChunks(fileId: string, skipExist?: boolean) {
     const result = await this.fileModel.findById(fileId);
 
     if (!result) return;
@@ -82,10 +84,11 @@ export class ChunkService {
 
     await this.fileModel.update(fileId, { chunkTaskId: asyncTaskId });
 
-    const asyncCaller = await createAsyncCaller({ jwtPayload: payload, userId: this.userId });
+    // Async router will read keyVaults from DB, no need to pass jwtPayload
+    const asyncCaller = await createAsyncCaller({ userId: this.userId });
 
     // trigger parse file task asynchronously
-    asyncCaller.file.parseFileToChunks({ fileId: fileId, taskId: asyncTaskId }).catch(async (e) => {
+    asyncCaller.file.parseFileToChunks({ fileId, taskId: asyncTaskId }).catch(async (e) => {
       console.error('[ParseFileToChunks] error:', e);
 
       await this.asyncTaskModel.update(asyncTaskId, {

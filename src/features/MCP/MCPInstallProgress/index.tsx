@@ -1,15 +1,14 @@
-import { Text } from '@lobehub/ui';
+import { Flexbox, Text } from '@lobehub/ui';
 import { Progress } from 'antd';
-import { useTheme } from 'antd-style';
+import { cssVar } from 'antd-style';
 import isEqual from 'fast-deep-equal';
-import { motion } from 'framer-motion';
+import * as motion from 'motion/react-m';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Flexbox } from 'react-layout-kit';
 
 import { useToolStore } from '@/store/tool';
 import { mcpStoreSelectors } from '@/store/tool/selectors';
-import { MCPInstallStep } from '@/store/tool/slices/mcpStore';
+import { MCPInstallStep } from '@/types/plugins';
 
 import InstallError from './InstallError';
 import MCPConfigForm from './MCPConfigForm';
@@ -21,8 +20,6 @@ const MCPInstallProgress = memo<{ identifier: string }>(({ identifier }) => {
     mcpStoreSelectors.getMCPInstallProgress(identifier),
     isEqual,
   );
-
-  const theme = useTheme();
 
   const stepText = installProgress ? t(`mcpInstall.${installProgress.step}` as any) : undefined;
   const needsConfig = installProgress?.needsConfig;
@@ -49,7 +46,7 @@ const MCPInstallProgress = memo<{ identifier: string }>(({ identifier }) => {
               showInfo={false}
               size="small"
               status="active"
-              strokeColor={{ '0%': theme.blue, '100%': theme.geekblue }}
+              strokeColor={{ '0%': cssVar.blue, '100%': cssVar.geekblue }}
             />
             {stepText && (
               <Text fontSize={11} style={{ marginTop: 4 }} type={'secondary'}>

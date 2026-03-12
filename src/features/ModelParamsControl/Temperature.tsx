@@ -1,9 +1,8 @@
-import { Alert, Icon, SliderWithInput } from '@lobehub/ui';
-import { css, cx, useTheme } from 'antd-style';
+import { Alert, Flexbox, Icon, SliderWithInput } from '@lobehub/ui';
+import { css, cssVar, cx } from 'antd-style';
 import { Sparkle, Sparkles } from 'lucide-react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Flexbox } from 'react-layout-kit';
 
 import { useAgentStore } from '@/store/agent';
 import { agentSelectors } from '@/store/agent/selectors';
@@ -31,8 +30,8 @@ const Warning = memo(() => {
     temperature >= 1.5 && (
       <Alert
         classNames={{ alert: cx(alertCls) }}
-        message={t('settingModel.temperature.warning')}
         style={{ fontSize: 12 }}
+        title={t('settingModel.temperature.warning')}
         type={'warning'}
         variant={'borderless'}
       />
@@ -41,34 +40,36 @@ const Warning = memo(() => {
 });
 
 interface TemperatureProps {
+  disabled?: boolean;
   onChange?: (value: number) => void;
   value?: number;
 }
 
-const Temperature = memo<TemperatureProps>(({ value, onChange }) => {
-  const theme = useTheme();
+const Temperature = memo<TemperatureProps>(({ value, onChange, disabled }) => {
   return (
-    <Flexbox gap={4} style={{ paddingInlineStart: 8 }}>
+    <Flexbox gap={4} style={{ width: '100%' }}>
       <SliderWithInput
+        changeOnWheel
         controls={false}
-        marks={{
-          0: <Icon icon={Sparkle} size={'small'} style={{ color: theme.colorTextQuaternary }} />,
-          1: <div />,
-          2: <Icon icon={Sparkles} size={'small'} style={{ color: theme.colorTextQuaternary }} />,
-        }}
+        disabled={disabled}
         max={2}
-        onChange={onChange}
         size={'small'}
         step={0.1}
-        style={{ height: 48 }}
+        style={{ height: 42 }}
+        value={value}
+        marks={{
+          0: <Icon icon={Sparkle} size={'small'} style={{ color: cssVar.colorTextQuaternary }} />,
+          1: <div />,
+          2: <Icon icon={Sparkles} size={'small'} style={{ color: cssVar.colorTextQuaternary }} />,
+        }}
         styles={{
           input: {
-            maxWidth: 64,
+            maxWidth: 43,
           },
         }}
-        value={value}
+        onChange={onChange}
       />
-      <Warning />
+      {!disabled && <Warning />}
     </Flexbox>
   );
 });

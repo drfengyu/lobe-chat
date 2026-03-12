@@ -1,29 +1,7 @@
-import { OpenAISTTPayload } from '@lobehub/tts';
+import { type OpenAISTTPayload } from '@lobehub/tts';
 import { createOpenaiAudioTranscriptions } from '@lobehub/tts/server';
 
 import { createBizOpenAI } from '@/app/(backend)/_deprecated/createBizOpenAI';
-
-export const runtime = 'edge';
-
-export const preferredRegion = [
-  'arn1',
-  'bom1',
-  'cdg1',
-  'cle1',
-  'cpt1',
-  'dub1',
-  'fra1',
-  'gru1',
-  'hnd1',
-  'iad1',
-  'icn1',
-  'kix1',
-  'lhr1',
-  'pdx1',
-  'sfo1',
-  'sin1',
-  'syd1',
-];
 
 export const POST = async (req: Request) => {
   const formData = await req.formData();
@@ -39,7 +17,10 @@ export const POST = async (req: Request) => {
   // if resOrOpenAI is a Response, it means there is an error,just return it
   if (openaiOrErrResponse instanceof Response) return openaiOrErrResponse;
 
-  const res = await createOpenaiAudioTranscriptions({ openai: openaiOrErrResponse, payload });
+  const res = await createOpenaiAudioTranscriptions({
+    openai: openaiOrErrResponse as any,
+    payload,
+  });
 
   return new Response(JSON.stringify(res), {
     headers: {

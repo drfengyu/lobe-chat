@@ -1,54 +1,64 @@
 /**
- * S3文件服务实现
+ * File service implementation interface
  */
 export interface FileServiceImpl {
   /**
-   * 创建预签名上传URL
+   * Create pre-signed upload URL
    */
-  createPreSignedUrl(key: string): Promise<string>;
+  createPreSignedUrl: (key: string) => Promise<string>;
+  /**
+   * Create pre-signed preview URL
+   */
+  createPreSignedUrlForPreview: (key: string, expiresIn?: number) => Promise<string>;
 
   /**
-   * 创建预签名预览URL
+   * Delete file
    */
-  createPreSignedUrlForPreview(key: string, expiresIn?: number): Promise<string>;
+  deleteFile: (key: string) => Promise<any>;
 
   /**
-   * 删除文件
+   * Delete files in batch
    */
-  deleteFile(key: string): Promise<any>;
+  deleteFiles: (keys: string[]) => Promise<any>;
 
   /**
-   * 批量删除文件
+   * Get file byte array
    */
-  deleteFiles(keys: string[]): Promise<any>;
+  getFileByteArray: (key: string) => Promise<Uint8Array>;
 
   /**
-   * 获取文件字节数组
+   * Get file content
    */
-  getFileByteArray(key: string): Promise<Uint8Array>;
+  getFileContent: (key: string) => Promise<string>;
 
   /**
-   * 获取文件内容
+   * Get file metadata from storage
+   * Used to verify actual file size instead of trusting client-provided values
    */
-  getFileContent(key: string): Promise<string>;
+  getFileMetadata: (key: string) => Promise<{ contentLength: number; contentType?: string }>;
 
   /**
-   * 获取完整文件URL
+   * Get full file URL
    */
-  getFullFileUrl(url?: string | null, expiresIn?: number): Promise<string>;
+  getFullFileUrl: (url?: string | null, expiresIn?: number) => Promise<string>;
 
   /**
-   * 从完整URL中提取key
+   * Extract key from full URL
    */
-  getKeyFromFullUrl(url: string): string;
+  getKeyFromFullUrl: (url: string) => Promise<string | null>;
 
   /**
-   * 上传内容
+   * Upload buffer with specified content type (for any file type)
    */
-  uploadContent(path: string, content: string): Promise<any>;
+  uploadBuffer: (key: string, buffer: Buffer, contentType: string) => Promise<{ key: string }>;
 
   /**
-   * 上传媒体文件
+   * Upload content
    */
-  uploadMedia(key: string, buffer: Buffer): Promise<{ key: string }>;
+  uploadContent: (path: string, content: string) => Promise<any>;
+
+  /**
+   * Upload media file (images only)
+   */
+  uploadMedia: (key: string, buffer: Buffer) => Promise<{ key: string }>;
 }

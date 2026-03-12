@@ -1,22 +1,27 @@
-import { isDev } from '@/const/env';
+import type { UpdateChannel } from '@lobechat/electron-client-ipc';
 
-// 更新频道（stable, beta, alpha 等）
-export const UPDATE_CHANNEL = process.env.UPDATE_CHANNEL;
+import { isDev } from '@/const/env';
+import { getDesktopEnv } from '@/env';
+
+// Build-time default channel, can be overridden at runtime via store
+const rawChannel = getDesktopEnv().UPDATE_CHANNEL || 'stable';
+const VALID_CHANNELS = new Set<UpdateChannel>(['stable', 'nightly', 'canary']);
+export const UPDATE_CHANNEL: UpdateChannel = VALID_CHANNELS.has(rawChannel as UpdateChannel)
+  ? (rawChannel as UpdateChannel)
+  : rawChannel === 'beta'
+    ? 'nightly'
+    : 'stable';
+
+// S3 base URL for all channels
+// e.g., https://releases.lobehub.com
+// Each channel resolves to {base}/{channel}/
+export const UPDATE_SERVER_URL = getDesktopEnv().UPDATE_SERVER_URL;
 
 export const updaterConfig = {
-  // 应用更新配置
   app: {
-    // 是否自动检查更新
     autoCheckUpdate: true,
-    // 是否自动下载更新
     autoDownloadUpdate: true,
-    // 检查更新的时间间隔（毫秒）
-    checkUpdateInterval: 60 * 60 * 1000, // 1小时
+    checkUpdateInterval: 60 * 60 * 1000, // 1 hour
   },
-
-  // 是否启用应用更新
   enableAppUpdate: !isDev,
-
-  // 是否启用渲染层热更新
-  enableRenderHotUpdate: !isDev,
 };

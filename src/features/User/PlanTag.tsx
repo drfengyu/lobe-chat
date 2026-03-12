@@ -1,43 +1,47 @@
-import { Tag, Tooltip } from '@lobehub/ui';
-import { useTheme } from 'antd-style';
-import { CSSProperties, memo, useMemo } from 'react';
+import { Plans } from '@lobechat/types';
+import { Tag } from '@lobehub/ui';
+import { cssVar } from 'antd-style';
+import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
+import urlJoin from 'url-join';
+
+import { OFFICIAL_URL } from '@/const/url';
+import { isDesktop } from '@/const/version';
+import PlanIcon from '@/features/PlanIcon';
 
 export enum PlanType {
   Preview = 'preview',
 }
 
 export interface PlanTagProps {
-  type?: PlanType;
+  type?: PlanType | Plans;
 }
 
 const PlanTag = memo<PlanTagProps>(({ type = PlanType.Preview }) => {
   const { t } = useTranslation('common');
-  const theme = useTheme();
-  const tag: {
-    desc: string;
-    style: CSSProperties;
-    title: string;
-  } = useMemo(() => {
-    switch (type) {
-      case PlanType.Preview: {
-        return {
-          desc: t('userPanel.community'),
-          style: {
-            background: theme.colorFill,
-          },
-          title: 'Community',
-        };
-      }
-    }
-  }, []);
+
+  if (type === PlanType.Preview) {
+    return (
+      <Tag
+        style={{ background: cssVar.colorFill, borderRadius: 12, cursor: 'pointer' }}
+        variant={'filled'}
+      >
+        {t('userPanel.community')}
+      </Tag>
+    );
+  }
+
+  const isFree = type === Plans.Free;
 
   return (
-    <Tooltip title={tag.desc}>
-      <Tag bordered={false} style={{ ...tag.style, borderRadius: 12, cursor: 'pointer' }}>
-        {tag.title}
-      </Tag>
-    </Tooltip>
+    <Link
+      style={{ cursor: 'pointer' }}
+      target={isDesktop ? '_blank' : undefined}
+      to={urlJoin(isDesktop ? OFFICIAL_URL : '/', isFree ? '/settings/plans' : '/settings/usage')}
+    >
+      <PlanIcon plan={type} size={22} type={'tag'} />
+    </Link>
   );
 });
 

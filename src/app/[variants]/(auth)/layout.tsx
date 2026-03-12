@@ -1,14 +1,24 @@
-import { PropsWithChildren } from 'react';
-import { Center, Flexbox } from 'react-layout-kit';
+import { NuqsAdapter } from 'nuqs/adapters/next/app';
+import { type PropsWithChildren } from 'react';
 
-const Page = ({ children }: PropsWithChildren) => {
+import ClientOnly from '@/components/client/ClientOnly';
+import { type DynamicLayoutProps } from '@/types/next';
+
+import AuthContainer from './_layout';
+import AuthGlobalProvider from './_layout/AuthGlobalProvider';
+
+const AuthLayout = async ({ children, params }: PropsWithChildren<DynamicLayoutProps>) => {
+  const { variants } = await params;
+
   return (
-    <Flexbox height={'100%'} width={'100%'}>
-      <Center height={'100%'} width={'100%'}>
-        {children}
-      </Center>
-    </Flexbox>
+    <AuthGlobalProvider variants={variants}>
+      <ClientOnly>
+        <NuqsAdapter>
+          <AuthContainer>{children}</AuthContainer>
+        </NuqsAdapter>
+      </ClientOnly>
+    </AuthGlobalProvider>
   );
 };
 
-export default Page;
+export default AuthLayout;

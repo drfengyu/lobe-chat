@@ -1,6 +1,6 @@
 import { DEFAULT_LANG } from '@/const/locale';
 
-import resources from './default';
+import type resources from './default';
 
 export const locales = [
   'ar',
@@ -18,6 +18,9 @@ export const locales = [
   'zh-TW',
   'vi-VN',
   'fa-IR',
+  'it-IT',
+  'pl-PL',
+  'nl-NL',
 ] as const;
 
 export type DefaultResources = typeof resources;

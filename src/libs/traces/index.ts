@@ -1,8 +1,8 @@
+import { CURRENT_VERSION } from '@lobechat/const';
 import { Langfuse } from 'langfuse';
-import { CreateLangfuseTraceBody } from 'langfuse-core';
+import { type CreateLangfuseTraceBody } from 'langfuse-core';
 
-import { getLangfuseConfig } from '@/config/langfuse';
-import { CURRENT_VERSION } from '@/const/version';
+import { getLangfuseConfig } from '@/envs/langfuse';
 import { TraceEventClient } from '@/libs/traces/event';
 
 /**
@@ -19,7 +19,7 @@ export class TraceClient {
 
     // when enabled langfuse, make sure the key are ready in envs
     if (!LANGFUSE_PUBLIC_KEY || !LANGFUSE_SECRET_KEY) {
-      console.log('-----');
+      console.info('-----');
       console.error(
         "You are enabling langfuse but don't set the `LANGFUSE_PUBLIC_KEY` or `LANGFUSE_SECRET_KEY`. Please check your env",
       );

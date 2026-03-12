@@ -1,11 +1,9 @@
-import { Alert } from '@lobehub/ui';
-import { Button } from 'antd';
+import { Alert, Button, Flexbox } from '@lobehub/ui';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Flexbox } from 'react-layout-kit';
 
 import { useToolStore } from '@/store/tool';
-import { MCPErrorInfo } from '@/types/plugins';
+import { type MCPErrorInfo } from '@/types/plugins';
 
 import ErrorDetails from './ErrorDetails';
 
@@ -22,25 +20,25 @@ const InstallError = memo<InstallErrorProps>(({ errorInfo, identifier }) => {
   return (
     <Flexbox gap={8}>
       <Alert
+        type="error"
+        variant={'borderless'}
         action={
           <Flexbox>
             <Button
               color={'default'}
+              size={'small'}
+              variant={'filled'}
               onClick={() => {
                 cancelInstallMCPPlugin(identifier);
               }}
-              size={'small'}
-              variant={'filled'}
             >
               {t('common:close')}
             </Button>
           </Flexbox>
         }
-        message={t('mcpInstall.installError', {
+        title={t('mcpInstall.installError', {
           detail: t(`mcpInstall.errorTypes.${errorInfo.type}`),
         })}
-        type="error"
-        variant={'borderless'}
       />
       {errorInfo.metadata && (
         <ErrorDetails errorInfo={errorInfo.metadata} errorMessage={errorInfo.message} />

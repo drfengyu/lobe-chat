@@ -1,11 +1,10 @@
+import { LOBE_CHAT_CLOUD } from '@lobechat/business-const';
 import { LibraryBig } from 'lucide-react';
-import { Suspense, memo, useState } from 'react';
+import { memo, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import TipGuide from '@/components/TipGuide';
-import { LOBE_CHAT_CLOUD } from '@/const/branding';
-import { isServerMode } from '@/const/version';
-import { AssignKnowledgeBaseModal } from '@/features/KnowledgeBaseModal';
+import { AttachKnowledgeModal } from '@/features/LibraryModal';
 import { featureFlagsSelectors, useServerConfigStore } from '@/store/serverConfig';
 import { useUserStore } from '@/store/user';
 import { preferenceSelectors } from '@/store/user/selectors';
@@ -13,7 +12,7 @@ import { preferenceSelectors } from '@/store/user/selectors';
 import Action from '../components/Action';
 import { useControls } from './useControls';
 
-const enableKnowledge = isServerMode;
+const enableKnowledge = true;
 
 const Knowledge = memo(() => {
   const { t } = useTranslation('chat');
@@ -40,16 +39,16 @@ const Knowledge = memo(() => {
 
   const content = (
     <Action
+      icon={LibraryBig}
+      loading={updating}
+      showTooltip={false}
+      title={t('knowledgeBase.title')}
       dropdown={{
         maxHeight: 500,
         maxWidth: 480,
         menu: { items },
         minWidth: 240,
       }}
-      icon={LibraryBig}
-      loading={updating}
-      showTooltip={false}
-      title={t('knowledgeBase.title')}
     />
   );
 
@@ -57,19 +56,19 @@ const Knowledge = memo(() => {
     <Suspense fallback={<Action disabled icon={LibraryBig} title={t('knowledgeBase.title')} />}>
       {showTip ? (
         <TipGuide
-          onOpenChange={() => {
-            updateGuideState({ uploadFileInKnowledgeBase: false });
-          }}
           open={showTip}
           placement={'top'}
           title={t('knowledgeBase.uploadGuide')}
+          onOpenChange={() => {
+            updateGuideState({ uploadFileInKnowledgeBase: false });
+          }}
         >
           {content}
         </TipGuide>
       ) : (
         content
       )}
-      <AssignKnowledgeBaseModal open={modalOpen} setOpen={setModalOpen} />
+      <AttachKnowledgeModal open={modalOpen} setOpen={setModalOpen} />
     </Suspense>
   );
 });

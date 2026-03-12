@@ -1,5 +1,6 @@
 import { revalidateTag } from 'next/cache';
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 export const GET = async (request: NextRequest) => {
   if (!process.env.REVALIDATE_SECRET) {
@@ -18,7 +19,7 @@ export const GET = async (request: NextRequest) => {
     return NextResponse.json('tag query parameter is required', { status: 400 });
   }
 
-  revalidateTag(tag);
+  revalidateTag(tag, 'max');
 
   return Response.json({ now: Date.now(), revalidated: true });
 };

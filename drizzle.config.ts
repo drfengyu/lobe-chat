@@ -7,23 +7,15 @@ import type { Config } from 'drizzle-kit';
 
 dotenv.config();
 
-let connectionString = process.env.DATABASE_URL;
-
-if (process.env.NODE_ENV === 'test') {
-  console.log('current ENV:', process.env.NODE_ENV);
-  connectionString = process.env.DATABASE_TEST_URL;
-}
-
-if (!connectionString)
-  throw new Error('`DATABASE_URL` or `DATABASE_TEST_URL` not found in environment');
+let connectionString = process.env.DATABASE_URL!;
 
 export default {
   dbCredentials: {
     url: connectionString,
   },
   dialect: 'postgresql',
-  out: './src/database/migrations',
+  out: './packages/database/migrations',
 
-  schema: './src/database/schemas',
+  schema: './packages/database/src/schemas',
   strict: true,
 } satisfies Config;

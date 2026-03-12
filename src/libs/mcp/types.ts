@@ -31,23 +31,94 @@ export interface McpPrompt {
 }
 
 /**
- * MCP 认证配置接口
- * 支持第一阶段的手动配置和未来的 OAuth 2.1 自动化流程
+ * MCP Tool Call Result Types
+ */
+export interface TextContent {
+  _meta?: any;
+  text: string;
+  type: 'text';
+}
+
+export interface ImageContent {
+  _meta?: any;
+  data: string;
+  // base64
+  mimeType: string;
+  type: 'image';
+}
+
+export interface AudioContent {
+  _meta?: any;
+  data: string;
+  // base64
+  mimeType: string;
+  type: 'audio';
+}
+
+export interface ResourceContent {
+  _meta?: any;
+  resource: {
+    _meta?: any;
+    blob?: string;
+    mimeType?: string;
+    text?: string;
+    uri: string;
+  };
+  type: 'resource';
+}
+
+export interface ResourceLinkContent {
+  _meta?: any;
+  description?: string;
+  icons?: Array<{
+    mimeType?: string;
+    sizes?: string[];
+    src: string;
+  }>;
+  name: string;
+  title?: string;
+  type: 'resource_link';
+  uri: string;
+}
+
+export type ToolCallContent =
+  | TextContent
+  | ImageContent
+  | AudioContent
+  | ResourceContent
+  | ResourceLinkContent;
+
+export interface ToolCallResult {
+  content: ToolCallContent[];
+  isError?: boolean;
+  structuredContent?: any;
+}
+
+export interface MCPToolCallResult {
+  content: string;
+  error?: any;
+  state: ToolCallResult;
+  success: boolean;
+}
+
+/**
+ * MCP authentication configuration interface
+ * Supports manual configuration in the first stage and future OAuth 2.1 automated flow
  */
 export interface AuthConfig {
-  // C. 用户授权后获取的【用户令牌】
+  // C. User token obtained after user authorization
   accessToken?: string;
 
-  // 用户手动粘贴的 Bearer Token
-  // --- Stage 2 & 3: OAuth 2.1 自动化流程 ---
-  // A. 静态配置 或 动态注册获取的【客户端凭证】
+  // Bearer Token manually pasted by user
+  // --- Stage 2 & 3: OAuth 2.1 automated flow ---
+  // A. Client credentials obtained through static configuration or dynamic registration
   clientId?: string;
 
   clientSecret?: string;
-  refreshToken?: string; // 如果是机密客户端
-  scope?: string; // 想要申请的权限范围, e.g., "repo user:email"
+  refreshToken?: string; // For confidential clients
+  scope?: string; // Requested permission scope, e.g., "repo user:email"
 
-  // B. 服务器发现机制获取的【授权服务器元数据】
+  // B. Authorization server metadata obtained through server discovery mechanism
   serverMetadata?: {
     authorization_endpoint?: string;
     registration_endpoint?: string;
@@ -55,11 +126,11 @@ export interface AuthConfig {
     // ... and other RFC8414 fields
   };
 
-  // --- Stage 1: 手动配置 ---
+  // --- Stage 1: Manual configuration ---
   token?: string;
   tokenExpiresAt?: number;
-  // 认证类型
-  type: 'none' | 'bearer' | 'oauth2'; // accessToken 的过期时间戳
+  // Authentication type
+  type: 'none' | 'bearer' | 'oauth2'; // Expiration timestamp of accessToken
 }
 
 interface HttpMCPClientParams {
@@ -78,6 +149,14 @@ export interface StdioMCPParams {
   type: 'stdio';
 }
 
+export interface CloudMCPParams {
+  auth?: AuthConfig;
+  headers?: Record<string, string>;
+  name: string;
+  type: 'cloud';
+  url: string;
+}
+
 export type MCPClientParams = HttpMCPClientParams | StdioMCPParams;
 
 export type MCPErrorType =
@@ -90,17 +169,17 @@ export type MCPErrorType =
 export interface MCPErrorData {
   message: string;
   /**
-   * 结构化的错误元数据
+   * Structured error metadata
    */
   metadata?: {
     errorLog?: string;
 
     /**
-     * 原始错误信息
+     * Original error message
      */
     originalError?: string;
     /**
-     * MCP 连接参数
+     * MCP connection parameters
      */
     params?: {
       args?: string[];
@@ -109,7 +188,7 @@ export interface MCPErrorData {
     };
 
     /**
-     * 进程相关信息
+     * Process related information
      */
     process?: {
       exitCode?: number;
@@ -117,31 +196,31 @@ export interface MCPErrorData {
     };
 
     /**
-     * 错误发生的步骤
+     * Step where the error occurred
      */
     step?: string;
 
     /**
-     * 时间戳
+     * Timestamp
      */
     timestamp?: number;
   };
 
   /**
-   * 错误类型
+   * Error type
    */
   type: MCPErrorType;
 }
 
 /**
- * 结构化的 MCP 错误信息
+ * Structured MCP error information
  */
 export interface MCPError extends Error {
   data: MCPErrorData;
 }
 
 /**
- * 创建结构化的 MCP 错误
+ * Create a structured MCP error
  */
 export function createMCPError(
   type: MCPErrorData['type'],
@@ -160,4 +239,35 @@ export function createMCPError(
   };
 
   return error;
+}
+
+/**
+ * STDIO Process Output separator used in enhanced error messages
+ */
+const STDIO_OUTPUT_SEPARATOR = '--- STDIO Process Output ---';
+
+/**
+ * Parse error message to extract STDIO process output logs
+ * The enhanced error format from desktop is:
+ * "Original message\n\n--- STDIO Process Output ---\nlogs..."
+ */
+export interface ParsedStdioError {
+  errorLog?: string;
+  originalMessage: string;
+}
+
+export function parseStdioErrorMessage(errorMessage: string): ParsedStdioError {
+  const separatorIndex = errorMessage.indexOf(STDIO_OUTPUT_SEPARATOR);
+
+  if (separatorIndex === -1) {
+    return { originalMessage: errorMessage };
+  }
+
+  const originalMessage = errorMessage.slice(0, separatorIndex).trim();
+  const errorLog = errorMessage.slice(separatorIndex + STDIO_OUTPUT_SEPARATOR.length).trim();
+
+  return {
+    errorLog: errorLog || undefined,
+    originalMessage: originalMessage || errorMessage,
+  };
 }

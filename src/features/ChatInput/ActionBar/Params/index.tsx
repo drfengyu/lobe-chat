@@ -3,13 +3,17 @@ import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { useAgentStore } from '@/store/agent';
-import { agentSelectors } from '@/store/agent/slices/chat';
+import { agentByIdSelectors } from '@/store/agent/selectors';
 
+import { useAgentId } from '../../hooks/useAgentId';
 import Action from '../components/Action';
 import Controls from './Controls';
 
 const Params = memo(() => {
-  const [isLoading] = useAgentStore((s) => [agentSelectors.isAgentConfigLoading(s)]);
+  const agentId = useAgentId();
+  const [isLoading] = useAgentStore((s) => [
+    agentByIdSelectors.isAgentConfigLoadingById(agentId)(s),
+  ]);
   const [updating, setUpdating] = useState(false);
   const { t } = useTranslation('setting');
 
@@ -19,11 +23,11 @@ const Params = memo(() => {
     <Action
       icon={SlidersHorizontal}
       loading={updating}
+      showTooltip={false}
+      title={t('settingModel.params.title')}
       popover={{
         content: <Controls setUpdating={setUpdating} updating={updating} />,
       }}
-      showTooltip={false}
-      title={t('settingModel.params.title')}
     />
   );
 });

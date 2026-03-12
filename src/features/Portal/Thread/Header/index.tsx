@@ -1,16 +1,14 @@
-import { ActionIcon } from '@lobehub/ui';
-import { useTheme } from 'antd-style';
+import { ActionIcon, Flexbox } from '@lobehub/ui';
+import { cssVar } from 'antd-style';
 import { ArrowLeftRight, XIcon } from 'lucide-react';
 import { memo } from 'react';
-import { Flexbox } from 'react-layout-kit';
 
-import SidebarHeader from '@/components/SidebarHeader';
+import NavHeader from '@/features/NavHeader';
 import { useChatStore } from '@/store/chat';
 
 import Title from './Title';
 
 const Header = memo(() => {
-  const theme = useTheme();
   const [hasPortal, portalThreadId, closeThreadPortal, switchThread] = useChatStore((s) => [
     !!s.portalThreadId,
     s.portalThreadId,
@@ -19,30 +17,31 @@ const Header = memo(() => {
   ]);
 
   return (
-    <SidebarHeader
-      actions={
-        <Flexbox gap={4} horizontal>
+    <NavHeader
+      left={<Title />}
+      paddingBlock={6}
+      paddingInline={8}
+      showTogglePanelButton={false}
+      right={
+        <Flexbox horizontal gap={4}>
           {hasPortal && (
             <ActionIcon
               icon={ArrowLeftRight}
+              size={'small'}
               onClick={() => {
                 if (!portalThreadId) return;
 
                 switchThread(portalThreadId);
                 closeThreadPortal();
               }}
-              size={'small'}
             />
           )}
-          <ActionIcon icon={XIcon} onClick={closeThreadPortal} size={'small'} />
+          <ActionIcon icon={XIcon} size={'small'} onClick={closeThreadPortal} />
         </Flexbox>
       }
-      paddingBlock={6}
-      paddingInline={8}
       style={{
-        background: `linear-gradient(to bottom, ${theme.colorBgContainerSecondary}, ${theme.colorFillQuaternary})`,
+        borderBottom: `1px solid ${cssVar.colorBorderSecondary}`,
       }}
-      title={<Title />}
     />
   );
 });

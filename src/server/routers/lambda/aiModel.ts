@@ -1,3 +1,10 @@
+import { type AiProviderModelListItem } from 'model-bank';
+import {
+  AiModelTypeSchema,
+  CreateAiModelSchema,
+  ToggleAiModelEnableSchema,
+  UpdateAiModelSchema,
+} from 'model-bank';
 import { z } from 'zod';
 
 import { AiModelModel } from '@/database/models/aiModel';
@@ -7,13 +14,7 @@ import { authedProcedure, router } from '@/libs/trpc/lambda';
 import { serverDatabase } from '@/libs/trpc/lambda/middleware';
 import { getServerGlobalConfig } from '@/server/globalConfig';
 import { KeyVaultsGateKeeper } from '@/server/modules/KeyVaultsEncrypt';
-import {
-  AiProviderModelListItem,
-  CreateAiModelSchema,
-  ToggleAiModelEnableSchema,
-  UpdateAiModelSchema,
-} from '@/types/aiModel';
-import { ProviderConfig } from '@/types/user/settings';
+import { type ProviderConfig } from '@/types/user/settings';
 
 const aiModelProcedure = authedProcedure.use(serverDatabase).use(async (opts) => {
   const { ctx } = opts;
@@ -51,7 +52,7 @@ export const aiModelRouter = router({
     .input(
       z.object({
         id: z.string(),
-        // TODO: 补齐校验 Schema
+        // TODO: Complete validation schema
         models: z.array(z.any()),
       }),
     )
@@ -84,9 +85,20 @@ export const aiModelRouter = router({
     }),
 
   getAiProviderModelList: aiModelProcedure
-    .input(z.object({ id: z.string() }))
+    .input(
+      z.object({
+        enabled: z.boolean().optional(),
+        id: z.string(),
+        limit: z.number().int().min(1).max(200).optional(),
+        offset: z.number().int().min(0).optional(),
+      }),
+    )
     .query(async ({ ctx, input }): Promise<AiProviderModelListItem[]> => {
-      return ctx.aiInfraRepos.getAiProviderModelList(input.id);
+      return ctx.aiInfraRepos.getAiProviderModelList(input.id, {
+        enabled: input.enabled,
+        limit: input.limit,
+        offset: input.offset,
+      });
     }),
 
   removeAiModel: aiModelProcedure
@@ -121,6 +133,7 @@ export const aiModelRouter = router({
           z.object({
             id: z.string(),
             sort: z.number(),
+            type: AiModelTypeSchema.optional(),
           }),
         ),
       }),

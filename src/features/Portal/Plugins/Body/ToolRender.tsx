@@ -1,15 +1,15 @@
+import { BuiltinToolsPortals } from '@lobechat/builtin-tools/portals';
 import isEqual from 'fast-deep-equal';
 import { memo } from 'react';
 
 import PluginRender from '@/features/PluginsUI/Render';
 import { useChatStore } from '@/store/chat';
-import { chatPortalSelectors, chatSelectors } from '@/store/chat/selectors';
-import { BuiltinToolsPortals } from '@/tools/portals';
+import { chatPortalSelectors, dbMessageSelectors } from '@/store/chat/selectors';
 import { safeParseJSON } from '@/utils/safeParseJSON';
 
 const ToolRender = memo(() => {
   const messageId = useChatStore(chatPortalSelectors.toolMessageId);
-  const message = useChatStore(chatSelectors.getMessageById(messageId || ''), isEqual);
+  const message = useChatStore(dbMessageSelectors.getDbMessageById(messageId || ''), isEqual);
 
   // make sure the message and id is valid
   if (!messageId || !message) return;
@@ -30,10 +30,11 @@ const ToolRender = memo(() => {
       <PluginRender
         arguments={plugin.arguments}
         content={message.content}
-        id={messageId}
         identifier={plugin.identifier}
+        messageId={messageId}
         payload={plugin}
         pluginState={pluginState}
+        toolCallId={message.tool_call_id}
         type={plugin?.type}
       />
     );

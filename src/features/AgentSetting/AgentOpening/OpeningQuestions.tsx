@@ -1,21 +1,20 @@
 'use client';
 
-import { ActionIcon, Button, Input, SortableList } from '@lobehub/ui';
-import { Empty, Space } from 'antd';
-import { createStyles } from 'antd-style';
-import { PlusIcon, Trash } from 'lucide-react';
+import { ActionIcon, Button, Empty, Flexbox, Input, SortableList } from '@lobehub/ui';
+import { Space } from 'antd';
+import { createStaticStyles } from 'antd-style';
+import { MessageCircle, PlusIcon, Trash } from 'lucide-react';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Flexbox } from 'react-layout-kit';
 import useMergeState from 'use-merge-value';
 
 import { useStore } from '../store';
 import { selectors } from '../store/selectors';
 
-const useStyles = createStyles(({ css, token }) => ({
+const styles = createStaticStyles(({ css, cssVar }) => ({
   empty: css`
     margin-block: 24px;
-    margin-inline: 0;
+    margin-inline: auto;
   `,
   questionItemContainer: css`
     padding-block: 8px;
@@ -30,7 +29,7 @@ const useStyles = createStyles(({ css, token }) => ({
   `,
   repeatError: css`
     margin: 0;
-    color: ${token.colorErrorText};
+    color: ${cssVar.colorErrorText};
   `,
 }));
 
@@ -41,7 +40,6 @@ interface QuestionItem {
 
 const OpeningQuestions = memo(() => {
   const { t } = useTranslation('setting');
-  const { styles } = useStyles();
   const [questionInput, setQuestionInput] = useState('');
 
   const openingQuestions = useStore(selectors.openingQuestions);
@@ -88,14 +86,15 @@ const OpeningQuestions = memo(() => {
   const isRepeat = openingQuestions.includes(questionInput.trim());
 
   return (
-    <Flexbox gap={8}>
-      <Flexbox gap={4}>
-        <Space.Compact>
+    <Flexbox gap={8} width={'100%'}>
+      <Flexbox gap={4} width={'100%'}>
+        <Space.Compact style={{ width: '100%' }}>
           <Input
+            placeholder={t('settingOpening.openingQuestions.placeholder')}
+            style={{ flex: 1 }}
+            value={questionInput}
             onChange={(e) => setQuestionInput(e.target.value)}
             onPressEnter={addQuestion}
-            placeholder={t('settingOpening.openingQuestions.placeholder')}
-            value={questionInput}
           />
           <Button
             // don't allow repeat
@@ -114,8 +113,7 @@ const OpeningQuestions = memo(() => {
         {openingQuestions.length > 0 ? (
           <SortableList
             items={items}
-            onChange={handleSortEnd}
-            renderItem={(item) => (
+            renderItem={(item: QuestionItem) => (
               <SortableList.Item
                 className={styles.questionItemContainer}
                 id={item.id}
@@ -125,17 +123,20 @@ const OpeningQuestions = memo(() => {
                 <div className={styles.questionItemContent}>{item.content}</div>
                 <ActionIcon
                   icon={Trash}
-                  onClick={() => removeQuestion(item.content)}
                   size={'small'}
+                  onClick={() => removeQuestion(item.content)}
                 />
               </SortableList.Item>
             )}
+            onChange={handleSortEnd}
           />
         ) : (
           <Empty
             className={styles.empty}
             description={t('settingOpening.openingQuestions.empty')}
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
+            descriptionProps={{ fontSize: 14 }}
+            icon={MessageCircle}
+            style={{ maxWidth: 400 }}
           />
         )}
       </div>

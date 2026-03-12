@@ -1,25 +1,26 @@
-import { ActionIcon } from '@lobehub/ui';
-import { createStyles } from 'antd-style';
+import { type FlexboxProps } from '@lobehub/ui';
+import { ActionIcon, Center, Flexbox } from '@lobehub/ui';
+import { createStaticStyles, responsive } from 'antd-style';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { ReactNode, memo } from 'react';
-import { Center, Flexbox, FlexboxProps } from 'react-layout-kit';
+import { type ReactNode } from 'react';
+import { memo } from 'react';
 
-const useStyles = createStyles(({ css, token, responsive }) => ({
+const styles = createStaticStyles(({ css, cssVar }) => ({
   card: css`
     position: relative;
 
     overflow: hidden;
 
-    border: 1px solid ${token.colorBorderSecondary};
-    border-radius: ${token.borderRadiusLG}px;
+    border: 1px solid ${cssVar.colorBorderSecondary};
+    border-radius: ${cssVar.borderRadiusLG};
 
-    background: ${token.colorBgContainer};
+    background: ${cssVar.colorBgContainer};
   `,
   desc: css`
     font-size: 14px;
     line-height: 1.4;
-    color: ${token.colorTextDescription};
-    ${responsive.mobile} {
+    color: ${cssVar.colorTextDescription};
+    ${responsive.sm} {
       font-size: 12px;
     }
   `,
@@ -29,23 +30,23 @@ const useStyles = createStyles(({ css, token, responsive }) => ({
     inset-inline-start: 50%;
     transform: translateX(-50%);
 
-    border: 1px solid ${token.colorBorderSecondary};
+    border: 1px solid ${cssVar.colorBorderSecondary};
     border-radius: 50%;
 
-    background: ${token.colorBgContainer};
+    background: ${cssVar.colorBgContainer};
   `,
   header: css`
-    border-block-end: 1px solid ${token.colorBorderSecondary};
-    background: ${token.colorFillQuaternary};
+    border-block-end: 1px solid ${cssVar.colorBorderSecondary};
+    background: ${cssVar.colorFillQuaternary};
   `,
   more: css`
-    border: 1px solid ${token.colorBorderSecondary};
+    border: 1px solid ${cssVar.colorBorderSecondary};
   `,
   title: css`
     font-size: 16px;
     font-weight: bold;
     line-height: 1.4;
-    ${responsive.mobile} {
+    ${responsive.sm} {
       font-size: 14px;
     }
   `,
@@ -76,12 +77,13 @@ const IndexCard = memo<IndexCardProps>(
     children,
     ...rest
   }) => {
-    const { styles } = useStyles();
     return (
       <Flexbox
         style={{
           marginBottom: !expand ? 12 : undefined,
+          maxWidth: '1024px',
           position: 'relative',
+          width: '100%',
         }}
       >
         <Flexbox
@@ -92,29 +94,29 @@ const IndexCard = memo<IndexCardProps>(
         >
           {title && (
             <Flexbox
+              horizontal
               align={'center'}
               className={styles.header}
               gap={16}
-              horizontal
               justify={'space-between'}
               padding={16}
             >
-              <Flexbox align={'center'} gap={12} horizontal>
+              <Flexbox horizontal align={'center'} gap={12}>
                 {icon}
                 <Flexbox>
                   <div className={styles.title}>{title}</div>
                   {desc && <div className={styles.desc}>{desc}</div>}
                 </Flexbox>
               </Flexbox>
-              <Flexbox align={'center'} gap={8} horizontal>
+              <Flexbox horizontal align={'center'} gap={8}>
                 {extra}
                 {onMoreClick && (
                   <ActionIcon
                     className={styles.more}
                     icon={ChevronRight}
-                    onClick={onMoreClick}
                     size={{ blockSize: 32, borderRadius: '50%', size: 16 }}
                     title={moreTooltip}
+                    onClick={onMoreClick}
                   />
                 )}
               </Flexbox>
@@ -128,8 +130,8 @@ const IndexCard = memo<IndexCardProps>(
           <Center className={styles.expend} height={24} width={24}>
             <ActionIcon
               icon={ChevronDown}
-              onClick={onExpand}
               size={{ blockSize: 24, borderRadius: '50%', size: 16 }}
+              onClick={onExpand}
             />
           </Center>
         )}

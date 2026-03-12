@@ -1,26 +1,29 @@
-import { StateCreator } from 'zustand/vanilla';
+import { chainSummaryHistory } from '@lobechat/prompts';
+import { type UIChatMessage } from '@lobechat/types';
+import { TraceNameMap } from '@lobechat/types';
 
-import { chainSummaryHistory } from '@/chains/summaryHistory';
-import { TraceNameMap } from '@/const/trace';
 import { chatService } from '@/services/chat';
 import { topicService } from '@/services/topic';
-import { ChatStore } from '@/store/chat';
+import { type ChatStore } from '@/store/chat';
+import { type StoreSetter } from '@/store/types';
 import { useUserStore } from '@/store/user';
 import { systemAgentSelectors } from '@/store/user/selectors';
-import { ChatMessage } from '@/types/message';
 
-export interface ChatMemoryAction {
-  internal_summaryHistory: (messages: ChatMessage[]) => Promise<void>;
-}
+type Setter = StoreSetter<ChatStore>;
+export const chatMemory = (set: Setter, get: () => ChatStore, _api?: unknown) =>
+  new ChatMemoryActionImpl(set, get, _api);
 
-export const chatMemory: StateCreator<
-  ChatStore,
-  [['zustand/devtools', never]],
-  [],
-  ChatMemoryAction
-> = (set, get) => ({
-  internal_summaryHistory: async (messages) => {
-    const topicId = get().activeTopicId;
+export class ChatMemoryActionImpl {
+  readonly #get: () => ChatStore;
+
+  constructor(set: Setter, get: () => ChatStore, _api?: unknown) {
+    void _api;
+    void set;
+    this.#get = get;
+  }
+
+  internal_summaryHistory = async (messages: UIChatMessage[]): Promise<void> => {
+    const topicId = this.#get().activeTopicId;
     if (messages.length <= 1 || !topicId) return;
 
     const { model, provider } = systemAgentSelectors.historyCompress(useUserStore.getState());
@@ -32,8 +35,8 @@ export const chatMemory: StateCreator<
       },
       params: { ...chainSummaryHistory(messages), model, provider, stream: false },
       trace: {
-        sessionId: get().activeId,
-        topicId: get().activeTopicId,
+        sessionId: this.#get().activeAgentId,
+        topicId: this.#get().activeTopicId,
         traceName: TraceNameMap.SummaryHistoryMessages,
       },
     });
@@ -42,7 +45,9 @@ export const chatMemory: StateCreator<
       historySummary,
       metadata: { model, provider },
     });
-    await get().refreshTopic();
-    await get().refreshMessages();
-  },
-});
+    await this.#get().refreshTopic();
+    await this.#get().refreshMessages();
+  };
+}
+
+export type ChatMemoryAction = Pick<ChatMemoryActionImpl, keyof ChatMemoryActionImpl>;

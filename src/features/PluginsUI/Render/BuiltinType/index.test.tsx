@@ -1,53 +1,69 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
-import { DalleManifest } from '@/tools/dalle';
-import { BuiltinToolsRenders } from '@/tools/renders';
-
 import BuiltinType from './index';
 
-// Mock Render component and useParseContent hook
-vi.mock('@/tools/renders', () => ({
-  BuiltinToolsRenders: {
-    dalle3: vi.fn(() => <div>Test Renderer</div>),
-    [DalleManifest.identifier]: vi.fn(() => <div>{DalleManifest.identifier}</div>),
-  },
+// Mock renders module
+const mockWebBrowsingRender = vi.fn(({ content }) => <div>WebBrowsingRender: {content}</div>);
+const mockCodeInterpreterRender = vi.fn(({ content }) => (
+  <div>CodeInterpreterRender: {content}</div>
+));
+
+vi.mock('@lobechat/builtin-tools/renders', () => ({
+  getBuiltinRender: vi.fn((identifier, apiName) => {
+    if (identifier === 'lobe-web-browsing') return mockWebBrowsingRender;
+    if (identifier === 'lobe-code-interpreter') return mockCodeInterpreterRender;
+    return undefined;
+  }),
 }));
 
-// Mock Loading component
-vi.mock('../Loading', () => ({
-  default: vi.fn(() => <div>Loading...</div>),
+// Mock useParseContent hook
+vi.mock('../useParseContent', () => ({
+  useParseContent: vi.fn((content) => ({ data: content })),
 }));
 
 describe('BuiltinType', () => {
-  it('should render loading state if not JSON and loading is true', () => {
-    render(<BuiltinType content="..." id="123" loading={true} />);
-    expect(screen.getByText('Loading...')).toBeInTheDocument();
-  });
-
-  it('should not render anything if not JSON and loading is false', () => {
-    const { container } = render(<BuiltinType content="..." id="123" loading={false} />);
+  it('should not render anything if identifier is not provided', () => {
+    const { container } = render(<BuiltinType content="..." messageId="123" />);
     expect(container).toBeEmptyDOMElement();
   });
 
   it('should not render anything if identifier is unknown', () => {
-    const { container } = render(<BuiltinType content="{}" id="123" identifier="unknown" />);
+    const { container } = render(<BuiltinType content="{}" identifier="unknown" messageId="123" />);
     expect(container).toBeEmptyDOMElement();
   });
 
-  describe('DALL·E', () => {
-    it('should render the correct renderer if identifier is dalle3', () => {
-      render(<BuiltinType content='{"some":"data"}' id="123" identifier="dalle3" />);
-      expect(BuiltinToolsRenders.dalle3).toHaveBeenCalled();
-      expect(screen.getByText('Test Renderer')).toBeInTheDocument();
-    });
+  it('should render the correct renderer for web browsing', () => {
+    const content = '{"query":"test"}';
+    render(<BuiltinType content={content} identifier="lobe-web-browsing" messageId="123" />);
+    expect(screen.getByText(`WebBrowsingRender: ${content}`)).toBeInTheDocument();
+  });
 
-    it('should render the correct renderer if is DALL·E ', () => {
-      render(
-        <BuiltinType content='{"some":"data"}' id="123" identifier={DalleManifest.identifier} />,
-      );
-      expect(BuiltinToolsRenders.dalle3).toHaveBeenCalled();
-      expect(screen.getByText(DalleManifest.identifier)).toBeInTheDocument();
-    });
+  it('should render the correct renderer for code interpreter', () => {
+    const content = '{"code":"print(1)"}';
+    render(<BuiltinType content={content} identifier="lobe-code-interpreter" messageId="123" />);
+    expect(screen.getByText(`CodeInterpreterRender: ${content}`)).toBeInTheDocument();
+  });
+
+  it('should pass correct props to renderer', () => {
+    const content = '{"test":"data"}';
+    const args = '{"arg":"value"}';
+    const pluginState = { state: 'value' };
+    const pluginError = { error: 'test' };
+
+    render(
+      <BuiltinType
+        apiName="testApi"
+        arguments={args}
+        content={content}
+        identifier="lobe-web-browsing"
+        messageId="msg-123"
+        pluginError={pluginError}
+        pluginState={pluginState}
+        toolCallId="tool-call-123"
+      />,
+    );
+
+    expect(screen.getByText(`WebBrowsingRender: ${content}`)).toBeInTheDocument();
   });
 });

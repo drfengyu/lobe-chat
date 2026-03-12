@@ -1,4 +1,4 @@
-import { useTheme } from 'antd-style';
+import { cssVar } from 'antd-style';
 import { memo } from 'react';
 
 interface GuideVideoProps {
@@ -8,21 +8,20 @@ interface GuideVideoProps {
 }
 
 const GuideVideo = memo<GuideVideoProps>(({ height, width, src }) => {
-  const theme = useTheme();
   return (
     <video
       autoPlay
-      controls={false}
-      height={height}
       loop
       muted
+      controls={false}
+      height={height}
       src={src}
+      width={width}
       style={{
-        background: theme.colorFillSecondary,
+        background: cssVar.colorFillSecondary,
         height: 'auto',
         width: '100%',
       }}
-      width={width}
     />
   );
 });

@@ -1,23 +1,23 @@
 import { produce } from 'immer';
 
-import { UpdateTopicValue } from '@/server/routers/lambda/generationTopic';
-import { ImageGenerationTopic } from '@/types/generation';
+import { type UpdateTopicValue } from '@/server/routers/lambda/generationTopic';
+import { type ImageGenerationTopic } from '@/types/generation';
 
-interface AddGenerationTopicAction {
+type AddGenerationTopicAction = {
   type: 'addTopic';
   value: Partial<ImageGenerationTopic> & { id: string };
-}
+};
 
-interface UpdateGenerationTopicAction {
+type UpdateGenerationTopicAction = {
   id: string;
   type: 'updateTopic';
   value: UpdateTopicValue;
-}
+};
 
-interface DeleteGenerationTopicAction {
+type DeleteGenerationTopicAction = {
   id: string;
   type: 'deleteTopic';
-}
+};
 
 export type GenerationTopicDispatch =
   | AddGenerationTopicAction

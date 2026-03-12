@@ -1,8 +1,10 @@
-import debug from 'debug';
-import { NextRequest, NextResponse } from 'next/server';
 import { URL } from 'node:url';
 
-import { oidcEnv } from '@/envs/oidc';
+import debug from 'debug';
+import { type NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
+
+import { authEnv } from '@/envs/auth';
 import { createNodeRequest, createNodeResponse } from '@/libs/oidc-provider/http-adapter';
 import { getOIDCProvider } from '@/server/services/oidc/oidcProvider';
 
@@ -17,7 +19,7 @@ const handler = async (req: NextRequest) => {
   let responseCollector;
 
   try {
-    if (!oidcEnv.ENABLE_OIDC) {
+    if (!authEnv.ENABLE_OIDC) {
       log('OIDC is not enabled');
       return new NextResponse('OIDC is not enabled', { status: 404 });
     }
@@ -79,7 +81,6 @@ const handler = async (req: NextRequest) => {
     log('Final Response Headers: %O', finalHeaders);
 
     return new NextResponse(finalBody, {
-      // eslint-disable-next-line no-undef
       headers: finalHeaders as HeadersInit,
       status: finalStatus,
     });

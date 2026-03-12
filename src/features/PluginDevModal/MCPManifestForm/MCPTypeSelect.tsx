@@ -1,24 +1,23 @@
-import { Icon, Text } from '@lobehub/ui';
-import { createStyles } from 'antd-style';
+import { Center, Flexbox, Icon, Text } from '@lobehub/ui';
+import { createStaticStyles, cssVar, cx } from 'antd-style';
 import { CheckIcon, RouterIcon, TerminalIcon } from 'lucide-react';
 import React, { memo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Center, Flexbox } from 'react-layout-kit';
 
 import { isDesktop } from '@/const/version';
 
 // Define styles using antd-style (moved from MCPManifestForm)
-const useStyles = createStyles(({ token, css }) => ({
+const styles = createStaticStyles(({ css }) => ({
   active: css`
-    border-color: ${token.colorPrimary};
+    border-color: ${cssVar.colorPrimary};
 
     &:hover {
-      border-color: ${token.colorPrimary};
+      border-color: ${cssVar.colorPrimary};
     }
   `,
   cardDescription: css`
-    font-size: ${token.fontSizeSM}px;
-    color: ${token.colorTextDescription};
+    font-size: ${cssVar.fontSizeSM};
+    color: ${cssVar.colorTextDescription};
   `,
   cardTitle: css`
     font-weight: bold;
@@ -36,9 +35,9 @@ const useStyles = createStyles(({ token, css }) => ({
     height: 20px;
     border-radius: 50%;
 
-    color: ${token.colorBgContainer};
+    color: ${cssVar.colorBgContainer};
 
-    background-color: ${token.colorPrimary};
+    background-color: ${cssVar.colorPrimary};
   `,
   container: css`
     cursor: pointer;
@@ -48,31 +47,31 @@ const useStyles = createStyles(({ token, css }) => ({
     width: 100%;
     padding-block: 12px;
     padding-inline: 16px;
-    border: 1px solid ${token.colorBorder};
-    border-radius: ${token.borderRadiusLG}px;
+    border: 1px solid ${cssVar.colorBorder};
+    border-radius: ${cssVar.borderRadiusLG};
 
-    background-color: ${token.colorBgContainer};
+    background-color: ${cssVar.colorBgContainer};
 
     transition:
-      border-color 0.3s ${token.motionEaseInOut},
-      box-shadow 0.3s ${token.motionEaseInOut};
+      border-color 0.3s ${cssVar.motionEaseInOut},
+      box-shadow 0.3s ${cssVar.motionEaseInOut};
 
     &:hover {
-      border-color: ${token.colorPrimaryHover};
+      border-color: ${cssVar.colorPrimaryHover};
     }
   `,
   disabled: css`
     cursor: not-allowed;
-    border-color: ${token.colorBorder};
+    border-color: ${cssVar.colorBorder};
     opacity: 0.5;
-    background-color: ${token.colorBgContainerDisabled};
+    background-color: ${cssVar.colorBgContainerDisabled};
 
     &:hover {
-      border-color: ${token.colorBorder};
+      border-color: ${cssVar.colorBorder};
     }
   `,
   featureIcon: css`
-    color: ${token.colorTextSecondary};
+    color: ${cssVar.colorTextSecondary};
   `,
   featureItem: css`
     display: flex;
@@ -80,18 +79,17 @@ const useStyles = createStyles(({ token, css }) => ({
     align-items: center;
   `,
   featureText: css`
-    font-size: ${token.fontSizeSM}px;
-    color: ${token.colorTextSecondary};
+    font-size: ${cssVar.fontSizeSM};
+    color: ${cssVar.colorTextSecondary};
   `,
 }));
 
 // Helper component for feature list items (moved from MCPManifestForm)
 const FeatureItem = memo(({ children }: { children: React.ReactNode }) => {
-  const { styles, theme } = useStyles();
   return (
     <div className={styles.featureItem}>
       <Center className={styles.featureIcon}>
-        <CheckIcon color={theme.colorSuccess} size={16} />
+        <CheckIcon color={cssVar.colorSuccess} size={16} />
       </Center>
       <div className={styles.featureText}>{children}</div>
     </div>
@@ -105,7 +103,6 @@ interface MCPTypeSelectProps {
 
 const MCPTypeSelect = ({ value, onChange }: MCPTypeSelectProps) => {
   const { t } = useTranslation('plugin');
-  const { styles, cx } = useStyles();
 
   const handleSelect = (type: string) => {
     onChange?.(type);
@@ -129,7 +126,7 @@ const MCPTypeSelect = ({ value, onChange }: MCPTypeSelectProps) => {
   ];
 
   return (
-    <Flexbox gap={16} horizontal width={'100%'}>
+    <Flexbox horizontal gap={16} width={'100%'}>
       {data.map(({ label, description, features, value: itemValue, icon }) => {
         const isActive = value === itemValue;
         const disabled = itemValue === 'stdio' && !isDesktop;
@@ -138,14 +135,14 @@ const MCPTypeSelect = ({ value, onChange }: MCPTypeSelectProps) => {
             className={cx(styles.container, isActive && styles.active, disabled && styles.disabled)}
             gap={12}
             key={itemValue}
-            onClick={disabled ? undefined : () => handleSelect(itemValue)}
             style={{ flex: 1 }} // Make cards take equal width
+            onClick={disabled ? undefined : () => handleSelect(itemValue)}
           >
             <Center className={styles.checkIcon} style={{ opacity: isActive ? 1 : 0 }}>
               <CheckIcon size={14} />
             </Center>
 
-            <Flexbox align={'flex-start'} gap={12} horizontal>
+            <Flexbox horizontal align={'flex-start'} gap={12}>
               <Center height={22}>
                 <Icon icon={icon} style={{ fontSize: 16 }} />
               </Center>

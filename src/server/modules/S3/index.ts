@@ -2,15 +2,16 @@ import {
   DeleteObjectCommand,
   DeleteObjectsCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import mime from 'mime';
 import { z } from 'zod';
 
-import { fileEnv } from '@/config/file';
+import { fileEnv } from '@/envs/file';
 import { YEAR } from '@/utils/units';
-import { inferContentTypeFromImageUrl } from '@/utils/url';
 
 export const fileSchema = z.object({
   Key: z.string(),
@@ -31,21 +32,32 @@ export class S3 {
 
   private readonly setAcl: boolean;
 
-  constructor() {
-    if (!fileEnv.S3_ACCESS_KEY_ID || !fileEnv.S3_SECRET_ACCESS_KEY || !fileEnv.S3_BUCKET)
+  constructor(
+    accessKeyId: string | undefined,
+    secretAccessKey: string | undefined,
+    endpoint: string | undefined,
+    options?: {
+      bucket?: string;
+      forcePathStyle?: boolean;
+      region?: string;
+      setAcl?: boolean;
+    },
+  ) {
+    if (!accessKeyId || !secretAccessKey || !endpoint)
       throw new Error('S3 environment variables are not set completely, please check your env');
+    if (!options?.bucket) throw new Error('S3 bucket is not set, please check your env');
 
-    this.bucket = fileEnv.S3_BUCKET;
-    this.setAcl = fileEnv.S3_SET_ACL;
+    this.bucket = options?.bucket;
+    this.setAcl = options?.setAcl || false;
 
     this.client = new S3Client({
       credentials: {
-        accessKeyId: fileEnv.S3_ACCESS_KEY_ID,
-        secretAccessKey: fileEnv.S3_SECRET_ACCESS_KEY,
+        accessKeyId,
+        secretAccessKey,
       },
-      endpoint: fileEnv.S3_ENDPOINT,
-      forcePathStyle: fileEnv.S3_ENABLE_PATH_STYLE,
-      region: fileEnv.S3_REGION || DEFAULT_S3_REGION,
+      endpoint,
+      forcePathStyle: options?.forcePathStyle,
+      region: options?.region || DEFAULT_S3_REGION,
       // refs: https://github.com/lobehub/lobe-chat/pull/5479
       requestChecksumCalculation: 'WHEN_REQUIRED',
       responseChecksumValidation: 'WHEN_REQUIRED',
@@ -100,6 +112,26 @@ export class S3 {
     return response.Body.transformToByteArray();
   }
 
+  /**
+   * Get file metadata from S3 using HeadObject
+   * This is used to verify actual file size from S3 instead of trusting client-provided values
+   */
+  public async getFileMetadata(
+    key: string,
+  ): Promise<{ contentLength: number; contentType?: string }> {
+    const command = new HeadObjectCommand({
+      Bucket: this.bucket,
+      Key: key,
+    });
+
+    const response = await this.client.send(command);
+
+    return {
+      contentLength: response.ContentLength ?? 0,
+      contentType: response.ContentType,
+    };
+  }
+
   public async createPreSignedUrl(key: string): Promise<string> {
     const command = new PutObjectCommand({
       ACL: this.setAcl ? 'public-read' : undefined,
@@ -121,12 +153,20 @@ export class S3 {
     });
   }
 
-  // 添加一个新方法用于上传二进制内容
-  public async uploadBuffer(path: string, buffer: Buffer, contentType?: string) {
+  /**
+   * Upload buffer with specified content type
+   */
+  public async uploadBuffer(
+    path: string,
+    buffer: Buffer,
+    contentType?: string,
+    cacheControl?: string,
+  ) {
     const command = new PutObjectCommand({
       ACL: this.setAcl ? 'public-read' : undefined,
       Body: buffer,
       Bucket: this.bucket,
+      CacheControl: cacheControl,
       ContentType: contentType,
       Key: path,
     });
@@ -145,16 +185,31 @@ export class S3 {
     return this.client.send(command);
   }
 
+  /**
+   * Upload media file (images only) with long-term cache
+   */
   public async uploadMedia(key: string, buffer: Buffer) {
+    const contentType = mime.getType(key) || 'application/octet-stream';
     const command = new PutObjectCommand({
       ACL: this.setAcl ? 'public-read' : undefined,
       Body: buffer,
       Bucket: this.bucket,
       CacheControl: `public, max-age=${YEAR}`,
-      ContentType: inferContentTypeFromImageUrl(key)!,
+      ContentType: contentType,
       Key: key,
     });
 
     await this.client.send(command);
+  }
+}
+
+export class FileS3 extends S3 {
+  constructor() {
+    super(fileEnv.S3_ACCESS_KEY_ID, fileEnv.S3_SECRET_ACCESS_KEY, fileEnv.S3_ENDPOINT, {
+      bucket: fileEnv.S3_BUCKET,
+      forcePathStyle: fileEnv.S3_ENABLE_PATH_STYLE,
+      region: fileEnv.S3_REGION,
+      setAcl: fileEnv.S3_SET_ACL,
+    });
   }
 }

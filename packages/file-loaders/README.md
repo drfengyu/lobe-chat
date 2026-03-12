@@ -1,63 +1,89 @@
-# @lobehub/file-loaders
+# @lobechat/file-loaders
 
-`@lobehub/file-loaders` 是 LobeChat 项目中的一个工具包，专门用于从本地文件路径加载各种类型的文件，并将其内容转换为标准化的 `Document` 对象数组。
+`@lobechat/file-loaders` is a toolkit within the LobeHub project, specifically designed for loading various types of files from local file paths and converting their content into standardized `Document` object arrays.
 
-它的主要目的是提供一个统一的接口来读取不同的文件格式，提取其核心文本内容，并为后续处理（例如在 LobeChat 中进行文件预览、内容提取或将其作为知识库数据源）做好准备。
+Its primary purpose is to provide a unified interface for reading different file formats, extracting their core text content, and preparing them for subsequent processing (such as file preview, content extraction, or serving as knowledge base data sources in LobeHub).
 
-## ✨ 功能特性
+## ✨ Features
 
-- **统一接口**: 提供 `loadFile(filePath: string)` 函数作为核心入口点。
-- **自动类型检测**: 根据文件扩展名自动选择合适的加载方式。
-- **广泛的格式支持**:
-  - **纯文本类**: `.txt`, `.csv`, `.md`, `.json`, `.xml`, `.yaml`, `.html` 以及多种代码和配置文件格式。
-  - **PDF**: `.pdf` 文件。
-  - **Word**: `.docx` 文件。
-  - **Excel**: `.xlsx`, `.xls` 文件，每个工作表作为一个 `Page`。
-  - **PowerPoint**: `.pptx` 文件，每个幻灯片作为一个 `Page`。
-- **标准化输出**: 始终返回 `Promise<Document>`。 `Document` 对象代表一个加载的文件，其内部包含一个 `Page` 数组，代表文件的各个逻辑单元（页、幻灯片、工作表、文本块等）。
-- **层级结构**: 采用 `Document` 包含 `Page[]` 的结构，更好地反映文件原始组织方式。
-- **丰富的元数据**: 在 `Document` 和 `Page` 层面提供详细的元数据，包括文件信息、内容统计和结构信息。
+- **Unified Interface**: Provides `loadFile(filePath: string)` function as the core entry point.
+- **Automatic Type Detection**: Automatically selects appropriate loading methods based on file extensions.
+- **Extensive Format Support**:
+  - **Plain Text**: `.txt`, `.csv`, `.md`, `.json`, `.xml`, `.yaml`, `.html` and various code and configuration file formats.
+  - **PDF**: `.pdf` files.
+  - **Word**: `.docx` files.
+  - **Excel**: `.xlsx`, `.xls` files, with each worksheet as a `Page`.
+  - **PowerPoint**: `.pptx` files, with each slide as a `Page`.
+- **Standardized Output**: Always returns `Promise<Document>`. A `Document` object represents a loaded file, containing an array of `Page` objects that represent the logical units of the file (pages, slides, worksheets, text blocks, etc.).
+- **Hierarchical Structure**: Uses a structure where `Document` contains `Page[]`, better reflecting the original organization of the file.
+- **Rich Metadata**: Provides detailed metadata at both `Document` and `Page` levels, including file information, content statistics, and structural information.
 
-## 核心数据结构
+## Core Data Structures
 
-`loadFile` 函数返回一个 `FileDocument` 对象，包含文件级信息和其所有逻辑页面 / 块 (`DocumentPage`)。
+The `loadFile` function returns a `FileDocument` object containing file-level information and all its logical pages/blocks (`DocumentPage`).
 
 ### `FileDocument` Interface
 
-| 字段              | 类型              | 描述                                                           |
-| :---------------- | :---------------- | :------------------------------------------------------------- |
-| `content`         | `string`          | 文件内容 (聚合后的内容)                                        |
-| `createdTime`     | `Date`            | 文件创建时间戳。                                               |
-| `fileType`        | `string`          | 文件类型或扩展名。                                             |
-| `filename`        | `string`          | 原始文件名。                                                   |
-| `metadata`        | `object`          | 文件级别的元数据。                                             |
-| `metadata.author` | `string?`         | 文档作者 (如果可用)。                                          |
-| `metadata.error`  | `string?`         | 如果整个文件加载失败，记录错误信息。                           |
-| `metadata.title`  | `string?`         | 文档标题 (如果可用)。                                          |
-| `...`             | `any`             | 其他文件级别的元数据。                                         |
-| `modifiedTime`    | `Date`            | 文件最后修改时间戳。                                           |
-| `pages`           | `DocumentPage[]?` | 包含文档中所有逻辑页面 / 块的数组 (可选)。                     |
-| `source`          | `string`          | 原始文件的完整路径。                                           |
-| `totalCharCount`  | `number`          | 整个文档的总字符数 (所有 `DocumentPage` 的 `charCount` 之和)。 |
-| `totalLineCount`  | `number`          | 整个文档的总行数 (所有 `DocumentPage` 的 `lineCount` 之和)。   |
+| Field             | Type              | Description                                                                           |
+| :---------------- | :---------------- | :------------------------------------------------------------------------------------ |
+| `content`         | `string`          | File content (aggregated content)                                                     |
+| `createdTime`     | `Date`            | File creation timestamp.                                                              |
+| `fileType`        | `string`          | File type or extension.                                                               |
+| `filename`        | `string`          | Original filename.                                                                    |
+| `metadata`        | `object`          | File-level metadata.                                                                  |
+| `metadata.author` | `string?`         | Document author (if available).                                                       |
+| `metadata.error`  | `string?`         | Error information if the entire file loading failed.                                  |
+| `metadata.title`  | `string?`         | Document title (if available).                                                        |
+| `...`             | `any`             | Other file-level metadata.                                                            |
+| `modifiedTime`    | `Date`            | File last modified timestamp.                                                         |
+| `pages`           | `DocumentPage[]?` | Array containing all logical pages/blocks in the document (optional).                 |
+| `source`          | `string`          | Full path of the original file.                                                       |
+| `totalCharCount`  | `number`          | Total character count of the entire document (sum of all `DocumentPage` `charCount`). |
+| `totalLineCount`  | `number`          | Total line count of the entire document (sum of all `DocumentPage` `lineCount`).      |
 
 ### `DocumentPage` Interface
 
-| 字段                       | 类型      | 描述                         |
-| :------------------------- | :-------- | :--------------------------- |
-| `charCount`                | `number`  | 此页 / 块内容的字符数。      |
-| `lineCount`                | `number`  | 此页 / 块内容的行数。        |
-| `metadata`                 | `object`  | 与此页 / 块相关的元数据。    |
-| `metadata.chunkIndex`      | `number?` | 如果分割成块，当前块的索引。 |
-| `metadata.error`           | `string?` | 处理此页 / 块时发生的错误。  |
-| `metadata.lineNumberEnd`   | `number?` | 在原始文件中的结束行号。     |
-| `metadata.lineNumberStart` | `number?` | 在原始文件中的起始行号。     |
-| `metadata.pageNumber`      | `number?` | 页码 (适用于 PDF, DOCX)。    |
-| `metadata.sectionTitle`    | `string?` | 相关的章节标题。             |
-| `metadata.sheetName`       | `string?` | 工作表名称 (适用于 XLSX)。   |
-| `metadata.slideNumber`     | `number?` | 幻灯片编号 (适用于 PPTX)。   |
-| `metadata.totalChunks`     | `number?` | 如果分割成块，总块数。       |
-| `...`                      | `any`     | 其他特定于页 / 块的元数据。  |
-| `pageContent`              | `string`  | 此页 / 块的核心文本内容。    |
+| Field                      | Type      | Description                                     |
+| :------------------------- | :-------- | :---------------------------------------------- |
+| `charCount`                | `number`  | Character count of this page/block content.     |
+| `lineCount`                | `number`  | Line count of this page/block content.          |
+| `metadata`                 | `object`  | Metadata related to this page/block.            |
+| `metadata.chunkIndex`      | `number?` | Current chunk index if split into chunks.       |
+| `metadata.error`           | `string?` | Error occurred when processing this page/block. |
+| `metadata.lineNumberEnd`   | `number?` | End line number in the original file.           |
+| `metadata.lineNumberStart` | `number?` | Start line number in the original file.         |
+| `metadata.pageNumber`      | `number?` | Page number (applicable to PDF, DOCX).          |
+| `metadata.sectionTitle`    | `string?` | Related section title.                          |
+| `metadata.sheetName`       | `string?` | Worksheet name (applicable to XLSX).            |
+| `metadata.slideNumber`     | `number?` | Slide number (applicable to PPTX).              |
+| `metadata.totalChunks`     | `number?` | Total chunks if split into chunks.              |
+| `...`                      | `any`     | Other page/block-specific metadata.             |
+| `pageContent`              | `string`  | Core text content of this page/block.           |
 
-如果你对我们的项目感兴趣，欢迎在 [GitHub](https://github.com/lobehub/lobe-chat) 上查看、点赞或贡献代码！
+## 🤝 Contribution
+
+File formats and parsing requirements are constantly evolving. We welcome community contributions to expand format support and improve parsing accuracy. You can participate in improvements through:
+
+### How to Contribute
+
+1. **New File Format Support**: Add support for additional file types
+2. **Parser Improvements**: Enhance existing parsers for better content extraction
+3. **Metadata Enhancement**: Improve metadata extraction capabilities
+4. **Performance Optimization**: Optimize file loading and processing performance
+
+### Contribution Process
+
+1. Fork the [LobeHub repository](https://github.com/lobehub/lobe-chat)
+2. Add new format support or improve existing parsers
+3. Submit a Pull Request describing:
+
+- New file formats supported or improvements made
+- Testing with various file samples
+- Performance impact analysis
+- Documentation updates
+
+## 📌 Note
+
+This is an internal module of LobeHub (`"private": true`), designed specifically for LobeHub and not published as a standalone package.
+
+If you're interested in our project, feel free to check it out, star it, or contribute code on [GitHub](https://github.com/lobehub/lobe-chat)!

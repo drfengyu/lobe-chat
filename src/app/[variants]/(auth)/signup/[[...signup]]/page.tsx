@@ -1,35 +1,30 @@
-import { SignUp } from '@clerk/nextjs';
-import { notFound, redirect } from 'next/navigation';
+import { redirect } from 'next/navigation';
 
-import { serverFeatureFlags } from '@/config/featureFlags';
-import { enableClerk } from '@/const/auth';
+import { authEnv } from '@/envs/auth';
 import { metadataModule } from '@/server/metadata';
 import { translation } from '@/server/translation';
-import { DynamicLayoutProps } from '@/types/next';
+import { type DynamicLayoutProps } from '@/types/next';
 import { RouteVariants } from '@/utils/server/routeVariants';
+
+import BetterAuthSignUpForm from './BetterAuthSignUpForm';
 
 export const generateMetadata = async (props: DynamicLayoutProps) => {
   const locale = await RouteVariants.getLocale(props);
-  const { t } = await translation('clerk', locale);
+  const { t } = await translation('auth', locale);
+
   return metadataModule.generate({
-    description: t('signUp.start.subtitle'),
-    title: t('signUp.start.title'),
+    description: t('betterAuth.signup.subtitle'),
+    title: t('betterAuth.signup.title'),
     url: '/signup',
   });
 };
 
 const Page = () => {
-  if (!enableClerk) return notFound();
-
-  const enableClerkSignUp = serverFeatureFlags().enableClerkSignUp;
-
-  if (!enableClerkSignUp) {
-    redirect('/login');
+  if (authEnv.AUTH_DISABLE_EMAIL_PASSWORD) {
+    redirect('/signin');
   }
 
-  return <SignUp path="/signup" />;
+  return <BetterAuthSignUpForm />;
 };
-
-Page.displayName = 'SignUp';
 
 export default Page;

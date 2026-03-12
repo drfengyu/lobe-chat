@@ -1,16 +1,26 @@
+import { useParams } from 'react-router-dom';
+
 import { useAgentStore } from '@/store/agent';
-import { useSessionStore } from '@/store/session';
 import { useUserStore } from '@/store/user';
 import { authSelectors } from '@/store/user/selectors';
 
-export const useInitAgentConfig = () => {
-  const [useFetchAgentConfig] = useAgentStore((s) => [s.useFetchAgentConfig]);
+/**
+ * If a targetAgentId is provided, use it to fetch the agent config directly.
+ * Otherwise, use the active session id to fetch the config.
+ */
+export const useInitAgentConfig = (agentId?: string) => {
+  const [useFetchAgentConfig, activeAgentId] = useAgentStore((s) => [
+    s.useFetchAgentConfig,
+    s.activeAgentId,
+  ]);
 
   const isLogin = useUserStore(authSelectors.isLogin);
 
-  const [sessionId] = useSessionStore((s) => [s.activeId]);
+  const params = useParams<{ aid?: string }>();
 
-  const data = useFetchAgentConfig(isLogin, sessionId);
+  const id = agentId || activeAgentId || params.aid || '';
+
+  const data = useFetchAgentConfig(isLogin, id);
 
   return { ...data, isLoading: data.isLoading && isLogin };
 };

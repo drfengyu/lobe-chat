@@ -1,16 +1,12 @@
-import { FileItem } from '@/types/files';
+import { type FileItem } from '@/types/files';
 
 export interface ChatToolState {
   activePageContentUrl?: string;
-  dalleImageLoading: Record<string, boolean>;
-  dalleImageMap: Record<string, FileItem>;
-  localFileLoading: Record<string, boolean>;
-  searchLoading: Record<string, boolean>;
+  codeInterpreterFileMap: Record<string, FileItem>;
+  codeInterpreterImageMap: Record<string, FileItem>;
 }
 
 export const initialToolState: ChatToolState = {
-  dalleImageLoading: {},
-  dalleImageMap: {},
-  localFileLoading: {},
-  searchLoading: {},
+  codeInterpreterFileMap: {},
+  codeInterpreterImageMap: {},
 };

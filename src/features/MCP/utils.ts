@@ -1,7 +1,24 @@
-import { ConnectionConfig, DeploymentOption } from '@lobehub/market-types';
+import { type ConnectionConfig, type DeploymentOption } from '@lobehub/market-types';
 
-export const genServerConfig = (identifier?: string, connection?: ConnectionConfig) =>
-  JSON.stringify(
+export const genServerConfig = (identifier?: string, connection?: ConnectionConfig) => {
+  // Check if it is HTTP type
+  if (connection?.url) {
+    // HTTP type configuration
+    return JSON.stringify(
+      {
+        mcpServers: {
+          [String(identifier)]: {
+            url: connection.url,
+          },
+        },
+      },
+      null,
+      2,
+    );
+  }
+
+  // stdio type configuration
+  return JSON.stringify(
     {
       mcpServers: {
         [String(identifier)]: {
@@ -13,6 +30,7 @@ export const genServerConfig = (identifier?: string, connection?: ConnectionConf
     null,
     2,
   );
+};
 
 export const getRecommendedDeployment = (deploymentOptions: DeploymentOption[]) =>
   deploymentOptions?.find((item) => item.isRecommended) || deploymentOptions?.[0];

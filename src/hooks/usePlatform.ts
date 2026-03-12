@@ -13,6 +13,7 @@ export const usePlatform = () => {
   const browser = useRef(getBrowser());
 
   const platformInfo = {
+    isAndroid: platform.current?.toLowerCase() === 'android',
     isApple: platform.current && ['mac os', 'ios'].includes(platform.current?.toLowerCase()),
     isArc: isArc(),
     isChrome: browser.current?.toLowerCase() === 'chrome',
@@ -37,6 +38,6 @@ export const usePlatform = () => {
         ((platformInfo.isChromium && !platformInfo.isIOS) ||
           (platformInfo.isMacOS && platformInfo.isSonomaOrLaterSafari)),
     }),
-    [platformInfo],
+    [],
   );
 };

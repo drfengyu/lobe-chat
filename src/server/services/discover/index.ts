@@ -1,77 +1,116 @@
-import { CategoryItem, CategoryListQuery, MarketSDK } from '@lobehub/market-sdk';
-import { CallReportRequest, InstallReportRequest } from '@lobehub/market-types';
-import dayjs from 'dayjs';
-import debug from 'debug';
-import matter from 'gray-matter';
-import { cloneDeep, countBy, isString, merge, uniq, uniqBy } from 'lodash-es';
-import urlJoin from 'url-join';
-
-import { LOBE_DEFAULT_MODEL_LIST } from '@/config/aiModels';
-import { DEFAULT_MODEL_PROVIDER_LIST } from '@/config/modelProviders';
 import {
+  CURRENT_VERSION,
   DEFAULT_DISCOVER_ASSISTANT_ITEM,
   DEFAULT_DISCOVER_PLUGIN_ITEM,
   DEFAULT_DISCOVER_PROVIDER_ITEM,
-} from '@/const/discover';
-import { CURRENT_VERSION, isDesktop } from '@/const/version';
-import { normalizeLocale } from '@/locales/resources';
-import { AssistantStore } from '@/server/modules/AssistantStore';
-import { PluginStore } from '@/server/modules/PluginStore';
+  isDesktop,
+  KLAVIS_SERVER_TYPES,
+} from '@lobechat/const';
 import {
-  AssistantListResponse,
-  AssistantQueryParams,
+  type AgentStatus,
+  type AssistantListResponse,
+  type AssistantMarketSource,
+  type AssistantQueryParams,
+  type DiscoverAssistantDetail,
+  type DiscoverAssistantItem,
+  type DiscoverMcpDetail,
+  type DiscoverModelDetail,
+  type DiscoverModelItem,
+  type DiscoverPluginDetail,
+  type DiscoverPluginItem,
+  type DiscoverProviderDetail,
+  type DiscoverProviderItem,
+  type DiscoverUserProfile,
+  type IdentifiersResponse,
+  type McpListResponse,
+  type McpQueryParams,
+  type ModelListResponse,
+  type ModelQueryParams,
+  type PluginListResponse,
+  type PluginQueryParams,
+  type ProviderListResponse,
+  type ProviderQueryParams,
+} from '@lobechat/types';
+import {
+  AssistantCategory,
   AssistantSorts,
   CacheRevalidate,
   CacheTag,
-  DiscoverAssistantDetail,
-  DiscoverAssistantItem,
-  DiscoverMcpDetail,
-  DiscoverModelDetail,
-  DiscoverModelItem,
-  DiscoverPluginDetail,
-  DiscoverPluginItem,
-  DiscoverProviderDetail,
-  DiscoverProviderItem,
-  IdentifiersResponse,
-  McpListResponse,
-  McpQueryParams,
-  ModelListResponse,
-  ModelQueryParams,
+  McpCategory,
+  McpSorts,
   ModelSorts,
-  PluginListResponse,
-  PluginQueryParams,
   PluginSorts,
-  ProviderListResponse,
-  ProviderQueryParams,
   ProviderSorts,
-} from '@/types/discover';
+} from '@lobechat/types';
+import {
+  getAudioInputUnitRate,
+  getTextInputUnitRate,
+  getTextOutputUnitRate,
+} from '@lobechat/utils';
+import {
+  type CategoryItem,
+  type CategoryListQuery,
+  type MarketSDK,
+  type UserInfoResponse,
+} from '@lobehub/market-sdk';
+import {
+  type AgentEventRequest,
+  type CallReportRequest,
+  type InstallReportRequest,
+  type PluginEventRequest,
+} from '@lobehub/market-types';
+import dayjs from 'dayjs';
+import debug from 'debug';
+import { cloneDeep, countBy, isString, merge, uniq, uniqBy } from 'es-toolkit/compat';
+import matter from 'gray-matter';
+import urlJoin from 'url-join';
+
+import { type TrustedClientUserInfo } from '@/libs/trusted-client';
+import { normalizeLocale } from '@/locales/resources';
+import { AssistantStore } from '@/server/modules/AssistantStore';
+import { PluginStore } from '@/server/modules/PluginStore';
+import { MarketService } from '@/server/services/market';
 
 const log = debug('lobe-server:discover');
+
+export interface DiscoverServiceOptions {
+  /** Access token from OIDC flow (legacy) */
+  accessToken?: string;
+  /** User info for generating trusted client token */
+  userInfo?: TrustedClientUserInfo;
+}
 
 export class DiscoverService {
   assistantStore = new AssistantStore();
   pluginStore = new PluginStore();
   market: MarketSDK;
 
-  constructor({ accessToken }: { accessToken?: string } = {}) {
-    this.market = new MarketSDK({
-      accessToken,
-      baseURL: process.env.MARKET_BASE_URL,
-    });
-    log('DiscoverService initialized with market baseURL: %s', process.env.MARKET_BASE_URL);
+  constructor(options: DiscoverServiceOptions = {}) {
+    const { accessToken, userInfo } = options;
+
+    // Use MarketService to initialize MarketSDK
+    const marketService = new MarketService({ accessToken, userInfo });
+    this.market = marketService.market;
+
+    log(
+      'DiscoverService initialized with market baseURL: %s, hasAuth: %s, userId: %s',
+      process.env.MARKET_BASE_URL,
+      !!(accessToken || userInfo),
+      userInfo?.userId,
+    );
   }
 
   async registerClient({ userAgent }: { userAgent?: string }) {
     const getDeviceId = async (): Promise<string> => {
-      // 1. Vercel 环境下使用 VERCEL_PROJECT_ID
+      // 1. Use VERCEL_PROJECT_ID in Vercel environment
       if (process.env.VERCEL_PROJECT_ID) {
         return process.env.VERCEL_PROJECT_ID;
       }
 
-      // 2. 桌面端使用 machine-id
+      // 2. Use machine-id for desktop
       if (isDesktop) {
         try {
-          // 动态导入
+          // Dynamic import
           const { machineId } = await import('node-machine-id');
           return await machineId();
         } catch (error) {
@@ -96,14 +135,12 @@ export class DiscoverService {
   }
 
   async fetchM2MToken(params: { clientId: string; clientSecret: string }) {
-    // 使用传入的客户端凭证创建新的 MarketSDK 实例
-    const tokenMarket = new MarketSDK({
-      baseURL: process.env.MARKET_BASE_URL,
-      clientId: params.clientId,
-      clientSecret: params.clientSecret,
+    // Use MarketService with M2M credentials
+    const marketService = new MarketService({
+      clientCredentials: params,
     });
 
-    const tokenInfo = await tokenMarket.fetchM2MToken();
+    const tokenInfo = await marketService.fetchM2MToken();
 
     return {
       accessToken: tokenInfo.accessToken,
@@ -111,11 +148,54 @@ export class DiscoverService {
     };
   }
 
+  // ============================== Call Cloud Mcp Endpoint Methods ==============================
+
+  async callCloudMcpEndpoint(params: {
+    apiParams: Record<string, any>;
+    identifier: string;
+    toolName: string;
+    userAccessToken?: string;
+  }) {
+    log('callCloudMcpEndpoint: params=%O', {
+      apiParams: params.apiParams,
+      hasUserAccessToken: !!params.userAccessToken,
+      identifier: params.identifier,
+      toolName: params.toolName,
+    });
+
+    try {
+      // Build headers - only include Authorization if userAccessToken is provided
+      // When userAccessToken is not provided, MarketSDK will use trustedClientToken for authentication
+      const headers: Record<string, string> = {};
+      if (params.userAccessToken) {
+        headers.Authorization = `Bearer ${params.userAccessToken}`;
+      }
+
+      // Call cloud gateway with optional user access token in Authorization header
+      const result = await this.market.plugins.callCloudGateway(
+        {
+          apiParams: params.apiParams,
+          identifier: params.identifier,
+          toolName: params.toolName,
+        },
+        {
+          headers,
+        },
+      );
+
+      log('callCloudMcpEndpoint: success, result=%O', result);
+      return result;
+    } catch (error) {
+      log('callCloudMcpEndpoint: error=%O', error);
+      throw error;
+    }
+  }
+
   // ============================== Helper Methods ==============================
 
   /**
-   * 计算 ModelAbilities 的完整度分数
-   * 分数越高表示 abilities 越全
+   * Calculate ModelAbilities completeness score
+   * Higher score indicates more complete abilities
    */
   private calculateAbilitiesScore = (abilities?: any): number => {
     if (!abilities) return 0;
@@ -141,14 +221,14 @@ export class DiscoverService {
   };
 
   /**
-   * 在模型数组中选择 abilities 最全的模型
-   * 组合最全的 abilities 和最大的 contextWindowTokens
+   * Select the model with the most complete abilities from model array
+   * Combines the most complete abilities and largest contextWindowTokens
    */
   private selectModelWithBestAbilities = (models: DiscoverModelItem[]): DiscoverModelItem => {
     log('selectModelWithBestAbilities: input models count=%d', models.length);
     if (models.length === 1) return models[0];
 
-    // 找到最全的 abilities
+    // Find the most complete abilities
     let bestAbilities: Record<string, boolean> = {};
     let maxAbilitiesScore = 0;
     models.forEach((model) => {
@@ -157,7 +237,7 @@ export class DiscoverService {
         maxAbilitiesScore = score;
         bestAbilities = { ...(model.abilities as Record<string, boolean>) };
       } else if (score === maxAbilitiesScore && model.abilities) {
-        // 合并相同分数的 abilities，确保获得最全的组合
+        // Merge abilities with the same score to ensure the most complete combination
         const abilities = model.abilities as Record<string, boolean>;
         Object.keys(abilities).forEach((key) => {
           if (abilities[key]) {
@@ -167,26 +247,26 @@ export class DiscoverService {
       }
     });
 
-    // 找到最大的 contextWindowTokens
+    // Find the largest contextWindowTokens
     const maxContextWindowTokens = Math.max(
       ...models.map((model) => model.contextWindowTokens || 0),
     );
 
-    // 找到最新的 releasedAt
+    // Find the latest releasedAt
     const latestReleasedAt = models
       .map((model) => model.releasedAt)
       .filter(Boolean)
       .sort((a, b) => new Date(b!).getTime() - new Date(a!).getTime())[0];
 
-    // 找到最短的 identifier
+    // Find the shortest identifier
     const shortestIdentifier = models
       .map((model) => model.identifier)
       .reduce((shortest, current) => (current.length < shortest.length ? current : shortest));
 
-    // 选择一个基础模型（通常选择第一个）
+    // Select a base model (usually the first one)
     const baseModel = models[0];
 
-    // 组装最终模型，使用最佳的各项属性
+    // Assemble final model using the best attributes
     const result: DiscoverModelItem = {
       ...baseModel,
       abilities: bestAbilities as any,
@@ -204,25 +284,55 @@ export class DiscoverService {
     return result;
   };
 
-  // ============================== Assistant Market ==============================
+  private normalizeAuthorField = (author: unknown): { name: string; userName?: string } => {
+    if (!author) return { name: '' };
 
-  private _getAssistantList = async (locale?: string): Promise<DiscoverAssistantItem[]> => {
-    log('_getAssistantList: locale=%s', locale);
+    if (typeof author === 'string') return { name: author };
+
+    if (typeof author === 'object') {
+      const { avatar, url, name, userName } = author as {
+        avatar?: unknown;
+        name?: unknown;
+        url?: unknown;
+        userName?: unknown;
+      };
+
+      const authorName =
+        (typeof name === 'string' && name.length > 0 && name) ||
+        (typeof avatar === 'string' && avatar.length > 0 && avatar) ||
+        (typeof url === 'string' && url.length > 0 && url) ||
+        '';
+
+      return {
+        name: authorName,
+        userName: typeof userName === 'string' ? userName : undefined,
+      };
+    }
+
+    return { name: '' };
+  };
+
+  private isLegacySource = (source?: AssistantMarketSource) => source === 'legacy';
+
+  private legacyGetAssistantListRaw = async (locale?: string): Promise<DiscoverAssistantItem[]> => {
+    log('legacyGetAssistantListRaw: locale=%s', locale);
     const normalizedLocale = normalizeLocale(locale);
     const list = await this.assistantStore.getAgentIndex(normalizedLocale);
     if (!list || !Array.isArray(list)) {
-      log('_getAssistantList: no valid list found, returning empty array');
+      log('legacyGetAssistantListRaw: no valid list found, returning empty array');
       return [];
     }
     const result = list.map(({ meta, ...item }) => ({ ...item, ...meta }));
-    log('_getAssistantList: returning %d items', result.length);
+    log('legacyGetAssistantListRaw: returning %d items', result.length);
     return result;
   };
 
-  getAssistantCategories = async (params: CategoryListQuery = {}): Promise<CategoryItem[]> => {
-    log('getAssistantCategories: params=%O', params);
+  private legacyGetAssistantCategories = async (
+    params: CategoryListQuery = {},
+  ): Promise<CategoryItem[]> => {
+    log('legacyGetAssistantCategories: params=%O', params);
     const { q, locale } = params;
-    let list = await this._getAssistantList(locale);
+    let list = await this.legacyGetAssistantListRaw(locale);
     if (q) {
       const originalCount = list.length;
       list = list.filter((item) => {
@@ -234,7 +344,7 @@ export class DiscoverService {
           .includes(decodeURIComponent(q).toLowerCase());
       });
       log(
-        'getAssistantCategories: filtered by query "%s", %d -> %d items',
+        'legacyGetAssistantCategories: filtered by query "%s", %d -> %d items',
         q,
         originalCount,
         list.length,
@@ -242,58 +352,66 @@ export class DiscoverService {
     }
     const categoryCounts = countBy(list, (item) => item.category);
     const result = Object.entries(categoryCounts)
-      .filter(([category]) => Boolean(category)) // 过滤掉空值
+      .filter(([category]) => Boolean(category))
       .map(([category, count]) => ({
         category,
         count,
       }));
-    log('getAssistantCategories: returning %d categories', result.length);
+    log('legacyGetAssistantCategories: returning %d categories', result.length);
     return result;
   };
 
-  getAssistantDetail = async (params: {
+  private legacyGetAssistantDetail = async (params: {
     identifier: string;
     locale?: string;
+    version?: string;
   }): Promise<DiscoverAssistantDetail | undefined> => {
-    log('getAssistantDetail: params=%O', params);
+    log('legacyGetAssistantDetail: params=%O', params);
     const { locale, identifier } = params;
     const normalizedLocale = normalizeLocale(locale);
-    let data = await this.assistantStore.getAgent(identifier, normalizedLocale);
+    const data = await this.assistantStore.getAgent(identifier, normalizedLocale);
     if (!data) {
-      log('getAssistantDetail: assistant not found for identifier=%s', identifier);
+      log('legacyGetAssistantDetail: assistant not found for identifier=%s', identifier);
       return;
     }
     const { meta, ...item } = data;
     const assistant = merge(cloneDeep(DEFAULT_DISCOVER_ASSISTANT_ITEM), { ...item, ...meta });
     const list = await this.getAssistantList({
       category: assistant.category,
+      includeAgentGroup: true,
       locale,
       page: 1,
       pageSize: 7,
+      source: 'legacy',
     });
     const result = {
       ...assistant,
       related: list.items.filter((item) => item.identifier !== assistant.identifier).slice(0, 6),
     };
-    log('getAssistantDetail: returning assistant with %d related items', result.related.length);
+    log(
+      'legacyGetAssistantDetail: returning assistant with %d related items',
+      result.related.length,
+    );
     return result;
   };
 
-  getAssistantIdentifiers = async (): Promise<IdentifiersResponse> => {
-    log('getAssistantIdentifiers: fetching identifiers');
-    const list = await this._getAssistantList();
+  private legacyGetAssistantIdentifiers = async (): Promise<IdentifiersResponse> => {
+    log('legacyGetAssistantIdentifiers: fetching identifiers');
+    const list = await this.legacyGetAssistantListRaw();
     const result = list.map((item) => {
       return {
         identifier: item.identifier,
         lastModified: item.createdAt,
       };
     });
-    log('getAssistantIdentifiers: returning %d identifiers', result.length);
+    log('legacyGetAssistantIdentifiers: returning %d identifiers', result.length);
     return result;
   };
 
-  getAssistantList = async (params: AssistantQueryParams = {}): Promise<AssistantListResponse> => {
-    log('getAssistantList: params=%O', params);
+  private legacyGetAssistantList = async (
+    params: AssistantQueryParams = {},
+  ): Promise<AssistantListResponse> => {
+    log('legacyGetAssistantList: params=%O', params);
     const {
       locale,
       category,
@@ -301,15 +419,30 @@ export class DiscoverService {
       page = 1,
       pageSize = 20,
       q,
-      sort = AssistantSorts.CreatedAt,
+      sort = AssistantSorts.Recommended,
+      ownerId,
     } = params;
-    let list = await this._getAssistantList(locale);
+    const currentPage = Number(page) || 1;
+    const currentPageSize = Number(pageSize) || 20;
+
+    if (ownerId) {
+      log('legacyGetAssistantList: ownerId filter not supported in legacy source');
+      return {
+        currentPage,
+        items: [],
+        pageSize: currentPageSize,
+        totalCount: 0,
+        totalPages: 0,
+      };
+    }
+
+    let list = await this.legacyGetAssistantListRaw(locale);
     const originalCount = list.length;
 
     if (category) {
       list = list.filter((item) => item.category === category);
       log(
-        'getAssistantList: filtered by category "%s", %d -> %d items',
+        'legacyGetAssistantList: filtered by category "%s", %d -> %d items',
         category,
         originalCount,
         list.length,
@@ -326,13 +459,19 @@ export class DiscoverService {
           .toLowerCase()
           .includes(decodeURIComponent(q).toLowerCase());
       });
-      log('getAssistantList: filtered by query "%s", %d -> %d items', q, beforeFilter, list.length);
+      log(
+        'legacyGetAssistantList: filtered by query "%s", %d -> %d items',
+        q,
+        beforeFilter,
+        list.length,
+      );
     }
 
     if (sort) {
-      log('getAssistantList: sorting by %s %s', sort, order);
+      log('legacyGetAssistantList: sorting by %s %s', sort, order);
       switch (sort) {
-        case AssistantSorts.CreatedAt: {
+        case AssistantSorts.UpdatedAt: {
+          // Legacy source doesn't have updatedAt, fallback to createdAt
           list = list.sort((a, b) => {
             if (order === 'asc') {
               return dayjs(a.createdAt).unix() - dayjs(b.createdAt).unix();
@@ -342,73 +481,301 @@ export class DiscoverService {
           });
           break;
         }
-        case AssistantSorts.KnowledgeCount: {
-          list = list.sort((a, b) => {
-            if (order === 'asc') {
-              return a.knowledgeCount - b.knowledgeCount;
-            } else {
-              return b.knowledgeCount - a.knowledgeCount;
-            }
-          });
-          break;
-        }
-        case AssistantSorts.PluginCount: {
-          list = list.sort((a, b) => {
-            if (order === 'asc') {
-              return a.pluginCount - b.pluginCount;
-            } else {
-              return b.pluginCount - a.pluginCount;
-            }
-          });
-          break;
-        }
-        case AssistantSorts.TokenUsage: {
-          list = list.sort((a, b) => {
-            if (order === 'asc') {
-              return a.tokenUsage - b.tokenUsage;
-            } else {
-              return b.tokenUsage - a.tokenUsage;
-            }
-          });
-          break;
-        }
-        case AssistantSorts.Identifier: {
-          list = list.sort((a, b) => {
-            if (order !== 'desc') {
-              return a.identifier.localeCompare(b.identifier);
-            } else {
-              return b.identifier.localeCompare(a.identifier);
-            }
-          });
-          break;
-        }
-        case AssistantSorts.Title: {
-          list = list.sort((a, b) => {
-            if (order === 'desc') {
-              return (a.title || a.identifier).localeCompare(b.title || b.identifier);
-            } else {
-              return (b.title || b.identifier).localeCompare(a.title || a.identifier);
-            }
-          });
+        default: {
+          // Legacy source doesn't support these sorts (MostUsage, HaveSkills, Recommended), keep original order
           break;
         }
       }
     }
 
+    const start = (currentPage - 1) * currentPageSize;
+    const end = currentPage * currentPageSize;
     const result = {
-      currentPage: page,
-      items: list.slice((page - 1) * pageSize, page * pageSize),
-      pageSize,
+      currentPage,
+      items: list.slice(start, end),
+      pageSize: currentPageSize,
       totalCount: list.length,
-      totalPages: Math.ceil(list.length / pageSize),
+      totalPages: Math.ceil(list.length / currentPageSize),
     };
     log(
-      'getAssistantList: returning page %d/%d with %d items',
-      page,
+      'legacyGetAssistantList: returning page %d/%d with %d items',
+      currentPage,
       result.totalPages,
       result.items.length,
     );
     return result;
+  };
+
+  // ============================== Assistant Market ==============================
+
+  getAssistantCategories = async (
+    params: CategoryListQuery & { source?: AssistantMarketSource } = {},
+  ): Promise<CategoryItem[]> => {
+    log('getAssistantCategories: params=%O', params);
+    const { source, ...rest } = params;
+    if (this.isLegacySource(source)) {
+      return this.legacyGetAssistantCategories(rest);
+    }
+
+    const { q, locale } = rest;
+    const normalizedLocale = normalizeLocale(locale);
+
+    try {
+      // @ts-ignore
+      const categories = await this.market.agents.getCategories({
+        locale: normalizedLocale,
+        q,
+      });
+      log('getAssistantCategories: returning %d categories from market SDK', categories.length);
+      return categories;
+    } catch (error) {
+      log('getAssistantCategories: error fetching from market SDK: %O', error);
+      return [];
+    }
+  };
+
+  getAssistantDetail = async (params: {
+    identifier: string;
+    locale?: string;
+    source?: AssistantMarketSource;
+    version?: string;
+  }): Promise<DiscoverAssistantDetail | undefined> => {
+    log('getAssistantDetail: params=%O', params);
+    const { source, ...rest } = params;
+    if (this.isLegacySource(source)) {
+      return this.legacyGetAssistantDetail(rest);
+    }
+
+    const { locale, identifier, version } = rest;
+    const normalizedLocale = normalizeLocale(locale);
+
+    try {
+      // @ts-ignore
+      const data = await this.market.agents.getAgentDetail(identifier, {
+        locale: normalizedLocale,
+        version,
+      });
+
+      if (!data) {
+        log('getAssistantDetail: assistant not found for identifier=%s', identifier);
+        return;
+      }
+
+      const normalizedAuthor = this.normalizeAuthorField(data.author);
+      const assistant = {
+        author:
+          normalizedAuthor.name || (data.ownerId !== null ? `User${data.ownerId}` : 'Unknown'),
+        avatar: data.avatar || normalizedAuthor.name || '',
+        category: (data as any).category || 'general',
+        config: data.config || {},
+        createdAt: (data as any).createdAt,
+        currentVersion: data.version,
+        description: (data as any).description || data.summary,
+        // @ts-ignore
+        editorData: data.editorData || {},
+
+        examples: Array.isArray((data as any).examples)
+          ? (data as any).examples.map((example: any) => ({
+              content: typeof example === 'string' ? example : example.content || '',
+              role: example.role || 'user',
+            }))
+          : [],
+        forkCount: (data as any).forkCount,
+        forkedFromAgentId: (data as any).forkedFromAgentId,
+        homepage:
+          (data as any).homepage ||
+          `https://lobehub.com/discover/assistant/${(data as any).identifier}`,
+        identifier: (data as any).identifier,
+        isValidated: (data as any).isValidated,
+        knowledgeCount:
+          (data.config as any)?.knowledgeBases?.length || (data as any).knowledgeCount || 0,
+        pluginCount: (data.config as any)?.plugins?.length || (data as any).pluginCount || 0,
+        readme: data.documentationUrl || '',
+        schemaVersion: 1,
+        status: (data.status as AgentStatus) || undefined,
+        summary: data.summary || '',
+        systemRole: (data.config as any)?.systemRole || '',
+        tags: data.tags || [],
+        title: (data as any).name || (data as any).identifier,
+        tokenUsage: data.tokenUsage || 0,
+        userName: normalizedAuthor.userName,
+        versions:
+          // @ts-ignore
+          data.versions?.map((item) => ({
+            createdAt: (item as any).createdAt || item.updatedAt,
+            isLatest: item.isLatest,
+            isValidated: item.isValidated,
+            status: item.status as any,
+            version: item.version,
+          })) || [],
+      };
+
+      // Get related assistants
+      const list = await this.getAssistantList({
+        category: assistant.category,
+        includeAgentGroup: true,
+        locale,
+        page: 1,
+        pageSize: 7,
+        source,
+      });
+
+      const result = {
+        ...assistant,
+        related: list.items.filter((item) => item.identifier !== assistant.identifier).slice(0, 6),
+      };
+
+      log('getAssistantDetail: returning assistant with %d related items', result.related.length);
+      return result;
+    } catch (error) {
+      log('getAssistantDetail: error fetching from market SDK: %O', error);
+      return;
+    }
+  };
+
+  getAssistantIdentifiers = async (
+    params: { source?: AssistantMarketSource } = {},
+  ): Promise<IdentifiersResponse> => {
+    log('getAssistantIdentifiers: fetching identifiers with params=%O', params);
+    if (this.isLegacySource(params.source)) {
+      return this.legacyGetAssistantIdentifiers();
+    }
+
+    try {
+      // @ts-ignore
+      const identifiers = await this.market.agents.getPublishedIdentifiers();
+      // @ts-ignore
+      const result = identifiers.map((item) => ({
+        identifier: item.id,
+        lastModified: item.lastModified,
+      }));
+      log('getAssistantIdentifiers: returning %d identifiers from market SDK', result.length);
+      return result;
+    } catch (error) {
+      log('getAssistantIdentifiers: error fetching from market SDK: %O', error);
+      return [];
+    }
+  };
+
+  getAssistantList = async (params: AssistantQueryParams = {}): Promise<AssistantListResponse> => {
+    log('getAssistantList: params=%O', params);
+    const { source, ...rest } = params;
+    if (this.isLegacySource(source)) {
+      return this.legacyGetAssistantList(rest);
+    }
+
+    const {
+      locale,
+      category,
+      order = 'desc',
+      page = 1,
+      pageSize = 20,
+      q,
+      sort = AssistantSorts.Recommended,
+      ownerId,
+      includeAgentGroup,
+    } = rest;
+    const shouldOmitCategory = [AssistantCategory.All, AssistantCategory.Discover].includes(
+      category as AssistantCategory,
+    );
+
+    try {
+      const normalizedLocale = normalizeLocale(locale);
+
+      let apiSort: 'createdAt' | 'updatedAt' | 'name' | 'mostUsage' | 'recommended' = 'recommended';
+      let haveSkills: boolean | undefined = rest.haveSkills;
+
+      switch (sort) {
+        case AssistantSorts.UpdatedAt: {
+          apiSort = 'updatedAt';
+          break;
+        }
+        case AssistantSorts.MostUsage: {
+          apiSort = 'mostUsage';
+          break;
+        }
+        case AssistantSorts.HaveSkills: {
+          // When user selects "Skilled", set haveSkills=true and use recommended sort
+          haveSkills = true;
+          apiSort = 'updatedAt';
+          break;
+        }
+        case AssistantSorts.Recommended: {
+          apiSort = 'recommended';
+          break;
+        }
+        default: {
+          apiSort = 'recommended';
+        }
+      }
+
+      const data = await this.market.agents.getAgentList({
+        category: shouldOmitCategory ? undefined : category,
+        haveSkills,
+        // includeAgentGroup may not be in SDK type definition yet, using 'as any'
+        includeAgentGroup,
+        locale: normalizedLocale,
+        order,
+        ownerId,
+        page,
+        pageSize,
+        q,
+        sort: apiSort,
+        status: 'published',
+        visibility: 'public',
+      } as any);
+
+      const transformedItems: DiscoverAssistantItem[] = (data.items || []).map((item: any) => {
+        const normalizedAuthor = this.normalizeAuthorField(item.author);
+        return {
+          author:
+            normalizedAuthor.name || (item.ownerId !== null ? `User${item.ownerId}` : 'Unknown'),
+          avatar: item.avatar || normalizedAuthor.name || '',
+          category: item.category || 'general',
+          config: item.config || {},
+          createdAt: item.createdAt || item.updatedAt || new Date().toISOString(),
+          description: item.description || item.summary || '',
+          forkCount: item.forkCount,
+          homepage: item.homepage || `https://lobehub.com/discover/assistant/${item.identifier}`,
+          identifier: item.identifier,
+          installCount: item.installCount,
+          knowledgeCount: item.knowledgeCount ?? item.config?.knowledgeBases?.length ?? 0,
+          pluginCount: item.pluginCount ?? item.config?.plugins?.length ?? 0,
+          schemaVersion: item.schemaVersion ?? 1,
+          tags: item.tags || [],
+          title: item.name || item.identifier,
+          tokenUsage: item.tokenUsage || 0,
+          type: item.type,
+          updatedAt: item.updatedAt,
+          userName: normalizedAuthor.userName,
+        };
+      });
+
+      const result: AssistantListResponse = {
+        currentPage: data.currentPage || page,
+        items: transformedItems,
+        pageSize: data.pageSize || pageSize,
+        totalCount: data.totalCount || 0,
+        totalPages: data.totalPages || 0,
+      };
+
+      log(
+        'getAssistantList: returning page %d/%d with %d items from market SDK',
+        result.currentPage,
+        result.totalPages,
+        result.items.length,
+      );
+      return result;
+    } catch (error) {
+      log('getAssistantList: error fetching from market SDK: %O', error);
+      return {
+        currentPage: page,
+        items: [],
+        pageSize,
+        totalCount: 0,
+        totalPages: 0,
+      };
+    }
   };
 
   // ============================== MCP Market ==============================
@@ -448,12 +815,15 @@ export class DiscoverService {
         },
       },
     );
+
+    // Fetch related MCPs
     const list = await this.getMcpList({
       category: mcp.category,
       locale,
       page: 1,
       pageSize: 7,
     });
+
     const result = {
       ...mcp,
       related: list.items.filter((item) => item.identifier !== mcp.identifier).slice(0, 6),
@@ -462,27 +832,20 @@ export class DiscoverService {
     return result;
   };
 
-  getMcpIdentifiers = async (): Promise<IdentifiersResponse> => {
-    log('getMcpIdentifiers: fetching identifiers');
-    const result = await this.market.plugins.getPublishedIdentifiers({
-      cache: 'force-cache',
-      next: {
-        revalidate: CacheRevalidate.List,
-        tags: [CacheTag.Discover, CacheTag.MCP],
-      },
-    });
-    log('getMcpIdentifiers: returning %d identifiers', result.length);
-    return result;
-  };
-
   getMcpList = async (params: McpQueryParams = {}): Promise<McpListResponse> => {
     log('getMcpList: params=%O', params);
-    const { locale } = params;
+    const { category, locale, sort } = params;
     const normalizedLocale = normalizeLocale(locale);
+    const shouldOmitCategory = [McpCategory.All, McpCategory.Discover].includes(
+      category as McpCategory,
+    );
+
     const result = await this.market.plugins.getPluginList(
       {
         ...params,
+        category: shouldOmitCategory ? undefined : category,
         locale: normalizedLocale,
+        sort: shouldOmitCategory ? McpSorts.Recommended : sort,
       },
       {
         next: {
@@ -525,10 +888,105 @@ export class DiscoverService {
   };
 
   /**
+   * record Agent plugin event
+   */
+  createAgentEvent = async (params: AgentEventRequest) => {
+    await this.market.agents.createEvent(params);
+  };
+
+  /**
+   * record MCP plugin event
+   */
+  createPluginEvent = async (params: PluginEventRequest) => {
+    await this.market.plugins.createEvent(params);
+  };
+
+  /**
    * report plugin call result to marketplace
    */
   reportCall = async (params: CallReportRequest) => {
     await this.market.plugins.reportCall(params);
+  };
+
+  // ============================== Agent Analytics ==============================
+
+  /**
+   * Increase agent install count in marketplace
+   */
+  increaseAgentInstallCount = async (identifier: string) => {
+    await this.market.agents.increaseInstallCount(identifier);
+  };
+
+  /**
+   * Get agents that use a specific plugin
+   */
+  getAgentsByPlugin = async (params: {
+    locale?: string;
+    page?: number;
+    pageSize?: number;
+    pluginId: string;
+  }): Promise<AssistantListResponse> => {
+    log('getAgentsByPlugin: params=%O', params);
+    const { locale, pluginId, page = 1, pageSize = 20 } = params;
+    const normalizedLocale = normalizeLocale(locale);
+
+    try {
+      const data = await this.market.agents.getAgentsByPlugin({
+        locale: normalizedLocale,
+        page,
+        pageSize,
+        pluginId,
+      });
+
+      // Transform to DiscoverAssistantItem format
+      const items: DiscoverAssistantItem[] = (data.items || []).map((item: any) => {
+        const normalizedAuthor = this.normalizeAuthorField(item.author);
+        return {
+          author:
+            normalizedAuthor.name || (item.ownerId !== null ? `User${item.ownerId}` : 'Unknown'),
+          avatar: item.avatar || '',
+          category: item.category,
+          config: {} as any,
+          createdAt: item.createdAt || item.updatedAt || new Date().toISOString(),
+          description: item.description || '',
+          homepage: `https://lobehub.com/discover/assistant/${item.identifier}`,
+          identifier: item.identifier,
+          installCount: item.installCount,
+          knowledgeCount: item.knowledgeCount || 0,
+          pluginCount: item.pluginCount || 0,
+          schemaVersion: 1,
+          tags: item.tags || [],
+          title: item.name || item.identifier,
+          tokenUsage: item.tokenUsage || 0,
+          userName: normalizedAuthor.userName,
+        };
+      });
+
+      const result: AssistantListResponse = {
+        currentPage: data.currentPage || page,
+        items,
+        pageSize: data.pageSize || pageSize,
+        totalCount: data.totalCount || 0,
+        totalPages: data.totalPages || 0,
+      };
+
+      log(
+        'getAgentsByPlugin: returning page %d/%d with %d items',
+        result.currentPage,
+        result.totalPages,
+        result.items.length,
+      );
+      return result;
+    } catch (error) {
+      log('getAgentsByPlugin: error fetching from market SDK: %O', error);
+      return {
+        currentPage: page,
+        items: [],
+        pageSize,
+        totalCount: 0,
+        totalPages: 0,
+      };
+    }
   };
 
   // ============================== Plugin Market ==============================
@@ -577,7 +1035,7 @@ export class DiscoverService {
     }
     const categoryCounts = countBy(list, (item) => item.category);
     const result = Object.entries(categoryCounts)
-      .filter(([category]) => Boolean(category)) // 过滤掉空值
+      .filter(([category]) => Boolean(category)) // Filter out empty values
       .map(([category, count]) => ({
         category,
         count,
@@ -593,45 +1051,136 @@ export class DiscoverService {
   }): Promise<DiscoverPluginDetail | undefined> => {
     log('getPluginDetail: params=%O', params);
     const { locale, identifier, withManifest } = params;
+
+    // Step 1: Try to find in legacy plugin list
     const all = await this._getPluginList(locale);
-    let raw = all.find((item) => item.identifier === identifier);
-    if (!raw) {
-      log('getPluginDetail: plugin not found for identifier=%s', identifier);
-      return;
-    }
+    const raw = all.find((item) => item.identifier === identifier);
+    if (raw) {
+      log('getPluginDetail: found plugin in legacy list for identifier=%s', identifier);
+      const mergedRaw = merge(cloneDeep(DEFAULT_DISCOVER_PLUGIN_ITEM), raw);
+      const list = await this.getPluginList({
+        category: mergedRaw.category,
+        locale,
+        page: 1,
+        pageSize: 7,
+      });
 
-    raw = merge(cloneDeep(DEFAULT_DISCOVER_PLUGIN_ITEM), raw);
-    const list = await this.getPluginList({
-      category: raw.category,
-      locale,
-      page: 1,
-      pageSize: 7,
-    });
+      const plugin: DiscoverPluginDetail = {
+        ...mergedRaw,
+        related: list.items.filter((item) => item.identifier !== mergedRaw.identifier).slice(0, 6),
+        source: 'legacy',
+      };
 
-    let plugin = {
-      ...raw,
-      related: list.items.filter((item) => item.identifier !== raw.identifier).slice(0, 6),
-    };
+      if (!withManifest || !plugin?.manifest || !isString(plugin?.manifest)) {
+        log('getPluginDetail: returning legacy plugin without manifest processing');
+        return plugin;
+      }
 
-    if (!withManifest || !plugin?.manifest || !isString(plugin?.manifest)) {
-      log('getPluginDetail: returning plugin without manifest processing');
       return plugin;
     }
 
-    // 在 Edge Runtime 环境中使用了 Node.js 的 path 模块，但 Edge Runtime 不支持所有 Node.js API
-    // 这个函数使用了 @lobehub/chat-plugin-sdk/openapi，该包最终依赖了 @apidevtools/swagger-parser，而这个包在 Edge Runtime 环境中使用了不被支持的 Node.js path 模块。
-    // try {
-    //   const manifest = await getToolManifest(plugin.manifest);
-    //
-    //   return {
-    //     ...plugin,
-    //     manifest,
-    //   };
-    // } catch {
-    //   return plugin;
-    // }
+    // Step 2: Try to find in Market MCP plugins
+    log(
+      'getPluginDetail: plugin not found in legacy store for identifier=%s, trying MCP plugin',
+      identifier,
+    );
+    try {
+      const mcpDetail = await this.getMcpDetail({ identifier, locale });
+      const convertedMcp: Partial<DiscoverPluginDetail> = {
+        author:
+          typeof (mcpDetail as any).author === 'object'
+            ? (mcpDetail as any).author?.name || ''
+            : (mcpDetail as any).author || '',
+        avatar: (mcpDetail as any).icon || (mcpDetail as any).avatar || '',
+        category: (mcpDetail as any).category as any,
+        createdAt: (mcpDetail as any).createdAt || '',
+        description: mcpDetail.description || '',
+        homepage: mcpDetail.homepage || '',
+        identifier: mcpDetail.identifier,
+        manifest: undefined,
+        related: mcpDetail.related.map((item) => ({
+          author:
+            typeof (item as any).author === 'object'
+              ? (item as any).author?.name || ''
+              : (item as any).author || '',
+          avatar: (item as any).icon || (item as any).avatar || '',
+          category: (item as any).category as any,
+          createdAt: (item as any).createdAt || '',
+          description: (item as any).description || '',
+          homepage: (item as any).homepage || '',
+          identifier: item.identifier,
+          manifest: undefined,
+          schemaVersion: 1,
+          tags: (item as any).tags || [],
+          title: (item as any).name || item.identifier,
+        })) as unknown as DiscoverPluginItem[],
+        schemaVersion: 1,
+        source: 'market',
+        tags: (mcpDetail as any).tags || [],
+        title: (mcpDetail as any).name || mcpDetail.identifier,
+      };
+      const plugin = merge(cloneDeep(DEFAULT_DISCOVER_PLUGIN_ITEM), convertedMcp);
+      log('getPluginDetail: returning converted MCP plugin');
+      return plugin as DiscoverPluginDetail;
+    } catch {
+      log(
+        'getPluginDetail: MCP plugin not found for identifier=%s, trying builtin tools',
+        identifier,
+      );
+    }
 
-    return plugin;
+    // Step 3: Try to find in builtin tools
+    const { builtinTools } = await import('@lobechat/builtin-tools');
+    const builtinTool = builtinTools.find((tool) => tool.identifier === identifier);
+    if (builtinTool) {
+      log('getPluginDetail: found builtin tool for identifier=%s', identifier);
+      const plugin: DiscoverPluginDetail = {
+        author: 'LobeHub',
+        avatar: builtinTool.manifest.meta.avatar || '',
+        category: undefined,
+        createdAt: '',
+        description: builtinTool.manifest.meta.description || '',
+        homepage: 'https://lobehub.com',
+        identifier: builtinTool.identifier,
+        manifest: undefined,
+        related: [],
+        schemaVersion: 1,
+        source: 'builtin',
+        tags: builtinTool.manifest.meta.tags || [],
+        title: builtinTool.manifest.meta.title,
+      };
+      log('getPluginDetail: returning builtin tool plugin');
+      return plugin;
+    }
+
+    // Step 4: Try to find in Klavis server types (builtin tools that require env config)
+    const klavisTool = KLAVIS_SERVER_TYPES.find((tool) => tool.identifier === identifier);
+    if (klavisTool) {
+      log('getPluginDetail: found Klavis tool for identifier=%s', identifier);
+
+      // Avatar is empty here because frontend will render Klavis icons using KlavisIcon component
+      // which handles both string URLs and React component icons
+      const plugin: DiscoverPluginDetail = {
+        author: 'Klavis',
+        avatar: typeof klavisTool.icon === 'string' ? klavisTool.icon : '',
+        category: undefined,
+        createdAt: '',
+        description: `LobeHub Mcp Server: ${klavisTool.label}`,
+        homepage: 'https://klavis.ai',
+        identifier: klavisTool.identifier,
+        manifest: undefined,
+        related: [],
+        schemaVersion: 1,
+        source: 'builtin',
+        tags: ['klavis', 'mcp'],
+        title: klavisTool.label,
+      };
+      log('getPluginDetail: returning Klavis tool plugin');
+      return plugin;
+    }
+
+    log('getPluginDetail: plugin not found anywhere for identifier=%s', identifier);
+    return;
   };
 
   getPluginIdentifiers = async (): Promise<IdentifiersResponse> => {
@@ -741,6 +1290,10 @@ export class DiscoverService {
 
   private _getProviderList = async (): Promise<DiscoverProviderItem[]> => {
     log('_getProviderList: fetching provider list');
+    const [{ LOBE_DEFAULT_MODEL_LIST }, { DEFAULT_MODEL_PROVIDER_LIST }] = await Promise.all([
+      import('model-bank'),
+      import('model-bank/modelProviders'),
+    ]);
     const result = DEFAULT_MODEL_PROVIDER_LIST.map((item) => {
       const models = uniq(
         LOBE_DEFAULT_MODEL_LIST.filter((m) => m.providerId === item.id).map((m) => m.id),
@@ -764,8 +1317,9 @@ export class DiscoverService {
   }): Promise<DiscoverProviderDetail | undefined> => {
     log('getProviderDetail: params=%O', params);
     const { identifier, locale, withReadme } = params;
+    const { LOBE_DEFAULT_MODEL_LIST } = await import('model-bank');
     const all = await this._getProviderList();
-    let provider = all.find((item) => item.identifier === identifier);
+    const provider = all.find((item) => item.identifier === identifier);
     if (!provider) {
       log('getProviderDetail: provider not found for identifier=%s', identifier);
       return;
@@ -899,6 +1453,7 @@ export class DiscoverService {
 
   private _getRawModelList = async (): Promise<DiscoverModelItem[]> => {
     log('_getRawModelList: fetching raw model list');
+    const { LOBE_DEFAULT_MODEL_LIST } = await import('model-bank');
     const result = LOBE_DEFAULT_MODEL_LIST.map((item) => {
       const identifier = (item.id.split('/').at(-1) || item.id).toLowerCase();
       const providers = uniq(
@@ -916,7 +1471,7 @@ export class DiscoverService {
         providerCount: providers.length,
         providers,
       };
-      // 使用简单的合并而不是 DEFAULT_DISCOVER_MODEL_ITEM，避免类型冲突
+      // Use simple merge instead of DEFAULT_DISCOVER_MODEL_ITEM to avoid type conflicts
       return {
         ...model,
         abilities: model.abilities || {},
@@ -941,8 +1496,8 @@ export class DiscoverService {
       );
     }
 
-    // 优化去重逻辑：选择 abilities 最全的模型
-    // 1. 按 identifier 分组
+    // Optimize deduplication logic: select models with most complete abilities
+    // 1. Group by identifier
     const identifierGroups = new Map<string, DiscoverModelItem[]>();
     list.forEach((item) => {
       const key = item.identifier;
@@ -958,12 +1513,12 @@ export class DiscoverService {
       identifierGroups.size,
     );
 
-    // 2. 从每个 identifier 组中选择 abilities 最全的
-    let deduplicatedByIdentifier = Array.from(identifierGroups.values()).map((models) =>
+    // 2. Select the model with most complete abilities from each identifier group
+    const deduplicatedByIdentifier = Array.from(identifierGroups.values()).map((models) =>
       this.selectModelWithBestAbilities(models),
     );
 
-    // 3. 按 displayName 分组
+    // 3. Group by displayName
     const displayNameGroups = new Map<string, DiscoverModelItem[]>();
     deduplicatedByIdentifier.forEach((item) => {
       const key = item.displayName?.toLowerCase() || '';
@@ -979,7 +1534,7 @@ export class DiscoverService {
       displayNameGroups.size,
     );
 
-    // 4. 从每个 displayName 组中选择 abilities 最全的
+    // 4. Select the model with most complete abilities from each displayName group
     const finalList: DiscoverModelItem[] = Array.from(displayNameGroups.values()).map((models) =>
       this.selectModelWithBestAbilities(models),
     );
@@ -991,6 +1546,7 @@ export class DiscoverService {
   getModelCategories = async (params: CategoryListQuery = {}): Promise<CategoryItem[]> => {
     log('getModelCategories: params=%O', params);
     const { q } = params;
+    const { LOBE_DEFAULT_MODEL_LIST } = await import('model-bank');
     let list = LOBE_DEFAULT_MODEL_LIST;
     if (q) {
       const originalCount = list.length;
@@ -1011,7 +1567,7 @@ export class DiscoverService {
     }
     const categoryCounts = countBy(list, (item) => item.providerId);
     const result = Object.entries(categoryCounts)
-      .filter(([category]) => Boolean(category)) // 过滤掉空值
+      .filter(([category]) => Boolean(category)) // Filter out empty values
       .map(([category, count]) => ({
         category,
         count,
@@ -1024,6 +1580,10 @@ export class DiscoverService {
     identifier: string;
   }): Promise<DiscoverModelDetail | undefined> => {
     log('getModelDetail: params=%O', params);
+    const [{ LOBE_DEFAULT_MODEL_LIST }, { DEFAULT_MODEL_PROVIDER_LIST }] = await Promise.all([
+      import('model-bank'),
+      import('model-bank/modelProviders'),
+    ]);
     const { identifier } = params;
     const all = await this._getModelList();
     let model = all.find((item) => item.identifier.toLowerCase() === identifier.toLowerCase());
@@ -1146,13 +1706,13 @@ export class DiscoverService {
           list = list.sort((a, b) => {
             if (order === 'asc') {
               return (
-                (a.pricing?.input || a.pricing?.audioInput || 0) -
-                (b.pricing?.input || b.pricing?.audioInput || 0)
+                (getTextInputUnitRate(a.pricing) || getAudioInputUnitRate(a.pricing) || 0) -
+                (getTextInputUnitRate(b.pricing) || getAudioInputUnitRate(b.pricing) || 0)
               );
             } else {
               return (
-                (b.pricing?.input || b.pricing?.audioInput || 0) -
-                (a.pricing?.input || a.pricing?.audioInput || 0)
+                (getTextInputUnitRate(b.pricing) || getAudioInputUnitRate(b.pricing) || 0) -
+                (getTextInputUnitRate(a.pricing) || getAudioInputUnitRate(a.pricing) || 0)
               );
             }
           });
@@ -1161,9 +1721,13 @@ export class DiscoverService {
         case ModelSorts.OutputPrice: {
           list = list.sort((a, b) => {
             if (order === 'asc') {
-              return (a.pricing?.output || 0) - (b.pricing?.output || 0);
+              return (
+                (getTextOutputUnitRate(a.pricing) || 0) - (getTextOutputUnitRate(b.pricing) || 0)
+              );
             } else {
-              return (b.pricing?.output || 0) - (a.pricing?.output || 0);
+              return (
+                (getTextOutputUnitRate(b.pricing) || 0) - (getTextOutputUnitRate(a.pricing) || 0)
+              );
             }
           });
           break;
@@ -1205,5 +1769,309 @@ export class DiscoverService {
       result.items.length,
     );
     return result;
+  };
+
+  // ============================== User Profile ==============================
+
+  /**
+   * Get user profile and their published agents by username
+   */
+  getUserInfo = async (params: {
+    locale?: string;
+    username: string;
+  }): Promise<DiscoverUserProfile | undefined> => {
+    log('getUserInfo: params=%O', params);
+    const { username, locale } = params;
+
+    try {
+      // Call Market SDK to get user info
+      const response = (await this.market.user.getUserInfo(username, {
+        locale,
+      })) as UserInfoResponse & {
+        agentGroups?: any[];
+        favoriteAgentGroups?: any[];
+        favoriteAgents?: any[];
+        forkedAgentGroups?: any[];
+        forkedAgents?: any[];
+      };
+
+      if (!response?.user) {
+        log('getUserInfo: user not found for username=%s', username);
+        return undefined;
+      }
+
+      const {
+        user,
+        agents,
+        agentGroups,
+        forkedAgents,
+        forkedAgentGroups,
+        favoriteAgents,
+        favoriteAgentGroups,
+      } = response;
+
+      // Transform agents to DiscoverAssistantItem format
+      const transformedAgents: DiscoverAssistantItem[] = (agents || []).map((agent: any) => ({
+        author: user.displayName || user.userName || user.namespace || '',
+        avatar: agent.avatar || '',
+        category: agent.category as any,
+        config: {} as any,
+        createdAt: agent.createdAt,
+        description: agent.description || '',
+        forkCount: agent.forkCount,
+        homepage: `https://lobehub.com/discover/assistant/${agent.identifier}`,
+        identifier: agent.identifier,
+        installCount: agent.installCount,
+        isValidated: agent.isValidated,
+        knowledgeCount: agent.knowledgeCount || 0,
+        pluginCount: agent.pluginCount || 0,
+        schemaVersion: 1,
+        status: agent.status,
+        tags: agent.tags || [],
+        title: agent.name || agent.identifier,
+        tokenUsage: agent.tokenUsage || 0,
+      }));
+
+      // Transform agentGroups to DiscoverGroupAgentItem format
+      const transformedAgentGroups = (agentGroups || []).map((group: any) => ({
+        author: user.displayName || user.userName || user.namespace || '',
+        avatar: group.avatar || '👥',
+        category: group.category as any,
+        createdAt: group.createdAt,
+        description: group.description || '',
+        forkCount: group.forkCount,
+        homepage: `https://lobehub.com/discover/group_agent/${group.identifier}`,
+        identifier: group.identifier,
+        installCount: group.installCount || 0,
+        isFeatured: group.isFeatured || false,
+        isOfficial: group.isOfficial || false,
+        isValidated: group.isValidated,
+        memberCount: 0, // Will be populated from memberAgents in detail view
+        schemaVersion: 1,
+        status: group.status,
+        tags: group.tags || [],
+        title: group.name || group.identifier,
+        updatedAt: group.updatedAt,
+      }));
+
+      // Transform forkedAgents to DiscoverAssistantItem format
+      const transformedForkedAgents: DiscoverAssistantItem[] = (forkedAgents || []).map(
+        (agent: any) => ({
+          author: user.displayName || user.userName || user.namespace || '',
+          avatar: agent.avatar || '',
+          category: agent.category as any,
+          config: {} as any,
+          createdAt: agent.createdAt,
+          description: agent.description || '',
+          forkCount: agent.forkCount || 0,
+          forkedFromAgentId: agent.forkedFromAgentId || null,
+          homepage: `https://lobehub.com/discover/assistant/${agent.identifier}`,
+          identifier: agent.identifier,
+          installCount: agent.installCount,
+          isValidated: agent.isValidated,
+          knowledgeCount: agent.knowledgeCount || 0,
+          pluginCount: agent.pluginCount || 0,
+          schemaVersion: 1,
+          status: agent.status,
+          tags: agent.tags || [],
+          title: agent.name || agent.identifier,
+          tokenUsage: agent.tokenUsage || 0,
+        }),
+      );
+
+      // Transform forkedAgentGroups to DiscoverGroupAgentItem format
+      const transformedForkedAgentGroups = (forkedAgentGroups || []).map((group: any) => ({
+        author: user.displayName || user.userName || user.namespace || '',
+        avatar: group.avatar || '👥',
+        category: group.category as any,
+        createdAt: group.createdAt,
+        description: group.description || '',
+        forkCount: group.forkCount || 0,
+        forkedFromGroupId: group.forkedFromGroupId || null,
+        homepage: `https://lobehub.com/discover/group_agent/${group.identifier}`,
+        identifier: group.identifier,
+        installCount: group.installCount || 0,
+        isFeatured: group.isFeatured || false,
+        isOfficial: group.isOfficial || false,
+        isValidated: group.isValidated,
+        memberCount: 0, // Will be populated from memberAgents in detail view
+        schemaVersion: 1,
+        status: group.status,
+        tags: group.tags || [],
+        title: group.name || group.identifier,
+        updatedAt: group.updatedAt,
+      }));
+
+      // Transform favoriteAgents to DiscoverAssistantItem format
+      const transformedFavoriteAgents: DiscoverAssistantItem[] = (favoriteAgents || []).map(
+        (agent: any) => ({
+          author: agent.author || '',
+          avatar: agent.avatar || '',
+          category: agent.category as any,
+          config: {} as any,
+          createdAt: agent.createdAt,
+          description: agent.description || '',
+          forkCount: agent.forkCount || 0,
+          forkedFromAgentId: agent.forkedFromAgentId || null,
+          homepage: `https://lobehub.com/discover/assistant/${agent.identifier}`,
+          identifier: agent.identifier,
+          installCount: agent.installCount,
+          isValidated: agent.isValidated,
+          knowledgeCount: agent.knowledgeCount || 0,
+          pluginCount: agent.pluginCount || 0,
+          schemaVersion: 1,
+          status: agent.status,
+          tags: agent.tags || [],
+          title: agent.name || agent.identifier,
+          tokenUsage: agent.tokenUsage || 0,
+        }),
+      );
+
+      // Transform favoriteAgentGroups to DiscoverGroupAgentItem format
+      const transformedFavoriteAgentGroups = (favoriteAgentGroups || []).map((group: any) => ({
+        author: group.author || '',
+        avatar: group.avatar || '👥',
+        category: group.category as any,
+        createdAt: group.createdAt,
+        description: group.description || '',
+        forkCount: group.forkCount || 0,
+        forkedFromGroupId: group.forkedFromGroupId || null,
+        homepage: `https://lobehub.com/discover/group_agent/${group.identifier}`,
+        identifier: group.identifier,
+        installCount: group.installCount || 0,
+        isFeatured: group.isFeatured || false,
+        isOfficial: group.isOfficial || false,
+        isValidated: group.isValidated,
+        memberCount: 0, // Will be populated from memberAgents in detail view
+        schemaVersion: 1,
+        status: group.status,
+        tags: group.tags || [],
+        title: group.name || group.identifier,
+        updatedAt: group.updatedAt,
+      }));
+
+      const result: DiscoverUserProfile = {
+        agentGroups: transformedAgentGroups,
+        agents: transformedAgents,
+        favoriteAgentGroups: transformedFavoriteAgentGroups,
+        favoriteAgents: transformedFavoriteAgents,
+        forkedAgentGroups: transformedForkedAgentGroups,
+        forkedAgents: transformedForkedAgents,
+        user: {
+          avatarUrl: user.avatarUrl || null,
+          bannerUrl: user.meta?.bannerUrl || null,
+          createdAt: user.createdAt,
+          description: user.meta?.description || null,
+          displayName: user.displayName || null,
+          followersCount: user.followerCount ?? 0,
+          followingCount: user.followingCount ?? 0,
+          id: user.id,
+          namespace: user.namespace,
+          socialLinks: user.meta?.socialLinks || null,
+          type: user.type || null,
+          userName: user.userName || null,
+        },
+      };
+
+      log(
+        'getUserInfo: returning user profile with %d agents, %d groups, %d forked agents, %d forked groups, %d favorite agents, %d favorite groups',
+        result.agents.length,
+        result.agentGroups?.length || 0,
+        result.forkedAgents?.length || 0,
+        result.forkedAgentGroups?.length || 0,
+        result.favoriteAgents?.length || 0,
+        result.favoriteAgentGroups?.length || 0,
+      );
+      return result;
+    } catch (error) {
+      log('getUserInfo: error fetching user info: %O', error);
+      return undefined;
+    }
+  };
+
+  // ============================== Group Agent Market Methods ==============================
+
+  getGroupAgentCategories = async (params?: CategoryListQuery) => {
+    try {
+      // TODO: SDK method not yet available, using fallback
+      const response = await (this.market.agentGroups as any).getAgentGroupCategories?.(params);
+      return response || { items: [] };
+    } catch (error) {
+      log('getGroupAgentCategories: error: %O', error);
+      return { items: [] };
+    }
+  };
+
+  getGroupAgentDetail = async (params: {
+    identifier: string;
+    locale?: string;
+    version?: string;
+  }) => {
+    try {
+      const response = await this.market.agentGroups.getAgentGroupDetail(params.identifier, {
+        locale: params.locale,
+        version: params.version ? Number(params.version) : undefined,
+      });
+      return response;
+    } catch (error) {
+      log('getGroupAgentDetail: error: %O', error);
+      throw error;
+    }
+  };
+
+  getGroupAgentIdentifiers = async () => {
+    try {
+      // TODO: SDK method not yet available, using fallback
+      const response = await (this.market.agentGroups as any).getAgentGroupIdentifiers?.();
+      return response || { identifiers: [] };
+    } catch (error) {
+      log('getGroupAgentIdentifiers: error: %O', error);
+      return { identifiers: [] };
+    }
+  };
+
+  getGroupAgentList = async (params?: {
+    category?: string;
+    locale?: string;
+    order?: 'asc' | 'desc';
+    ownerId?: string;
+    page?: number;
+    pageSize?: number;
+    q?: string;
+    sort?: 'createdAt' | 'updatedAt' | 'name' | 'recommended';
+  }) => {
+    try {
+      const response = await this.market.agentGroups.getAgentGroupList({
+        ...params,
+        status: 'published' as any,
+        visibility: 'public' as any,
+      });
+      return response;
+    } catch (error) {
+      log('getGroupAgentList: error: %O', error);
+      return { currentPage: 1, items: [], totalCount: 0, totalPages: 1 };
+    }
+  };
+
+  createGroupAgentEvent = async (params: {
+    event: 'add' | 'chat' | 'click';
+    identifier: string;
+    source?: string;
+  }) => {
+    try {
+      // TODO: SDK method not yet available
+      await (this.market.agentGroups as any).createAgentGroupEvent?.(params);
+    } catch (error) {
+      log('createGroupAgentEvent: error: %O', error);
+    }
+  };
+
+  increaseGroupAgentInstallCount = async (identifier: string) => {
+    try {
+      // TODO: SDK method not yet available
+      await (this.market.agentGroups as any).increaseInstallCount?.(identifier);
+    } catch (error) {
+      log('increaseGroupAgentInstallCount: error: %O', error);
+    }
   };
 }

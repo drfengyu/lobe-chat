@@ -1,17 +1,15 @@
-import { InterceptRouteParams, InterceptRouteResponse } from '../types/route';
-
-export interface WindowsDispatchEvents {
+export interface OpenSettingsWindowOptions {
   /**
-   * 拦截客户端路由导航请求
-   * @param params 包含路径和来源信息的参数对象
-   * @returns 路由拦截结果
+   * Direct path to navigate to (e.g., '/settings/provider/openai').
+   * Takes precedence over tab and searchParams if provided.
    */
-  interceptRoute: (params: InterceptRouteParams) => InterceptRouteResponse;
-
+  path?: string;
   /**
-   * open the LobeHub Devtools
+   * @deprecated Use `path` instead. Query parameters that should be appended to the settings URL.
    */
-  openDevtools: () => void;
-
-  openSettingsWindow: (tab?: string) => void;
+  searchParams?: Record<string, string | undefined>;
+  /**
+   * @deprecated Use `path` instead. Settings page tab path or identifier.
+   */
+  tab?: string;
 }

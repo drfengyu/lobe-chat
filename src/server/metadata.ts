@@ -1,10 +1,12 @@
-import { Metadata } from 'next';
+import { BRANDING_NAME, ORG_NAME } from '@lobechat/business-const';
+import { type Metadata } from 'next';
 import qs from 'query-string';
 
-import { BRANDING_NAME } from '@/const/branding';
 import { DEFAULT_LANG } from '@/const/locale';
 import { OG_URL } from '@/const/url';
-import { Locales, locales } from '@/locales/resources';
+import { isCustomORG } from '@/const/version';
+import { type Locales } from '@/locales/resources';
+import { locales } from '@/locales/resources';
 import { getCanonicalUrl } from '@/server/utils/url';
 import { formatDescLength, formatTitleLength } from '@/utils/genOG';
 
@@ -30,9 +32,8 @@ export class Meta {
     type?: 'website' | 'article';
     url: string;
   }): Metadata {
-    // eslint-disable-next-line no-param-reassign
     const formatedTitle = formatTitleLength(title, 21);
-    // eslint-disable-next-line no-param-reassign
+
     const formatedDescription = formatDescLength(description, tags);
     const siteTitle = title.includes(BRANDING_NAME) ? title : title + ` · ${BRANDING_NAME}`;
     return {
@@ -61,7 +62,7 @@ export class Meta {
   }
 
   private genAlternateLocales = (locale: Locales, path: string = '/') => {
-    let links: any = {};
+    const links: any = {};
     const defaultLink = getCanonicalUrl(path);
     for (const alterLocales of locales) {
       links[alterLocales] = qs.stringifyUrl({
@@ -90,7 +91,7 @@ export class Meta {
       card: 'summary_large_image',
       description,
       images: [image],
-      site: '@lobehub',
+      site: isCustomORG ? `@${ORG_NAME}` : '@lobehub',
       title,
       url,
     };
@@ -122,7 +123,7 @@ export class Meta {
         },
       ],
       locale,
-      siteName: 'LobeChat',
+      siteName: BRANDING_NAME,
       title,
       type,
       url,

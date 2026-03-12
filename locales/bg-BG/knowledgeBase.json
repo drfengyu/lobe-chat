@@ -1,32 +1,27 @@
 {
-  "addToKnowledgeBase": {
-    "addSuccess": "Файлът беше добавен успешно, <1>прегледайте веднага</1>",
-    "confirm": "Добави",
-    "id": {
-      "placeholder": "Моля, изберете знание база за добавяне",
-      "required": "Моля, изберете знание база",
-      "title": "Целева знание база"
-    },
-    "title": "Добавяне към знание база",
-    "totalFiles": "Избрани са {{count}} файла"
-  },
-  "createNew": {
-    "confirm": "Създай нов",
-    "description": {
-      "placeholder": "Описание на знание базата (по избор)"
-    },
-    "formTitle": "Основна информация",
-    "name": {
-      "placeholder": "Име на знание базата",
-      "required": "Моля, попълнете името на знание базата"
-    },
-    "title": "Създаване на нова знание база"
-  },
-  "tab": {
-    "evals": "Оценки",
-    "files": "Документи",
-    "settings": "Настройки",
-    "testing": "Тест за извикване"
-  },
-  "title": "Знание база"
+  "addToKnowledgeBase.addSuccess": "Файлът беше добавен успешно",
+  "addToKnowledgeBase.alreadyExists": "Този файл вече съществува в библиотеката",
+  "addToKnowledgeBase.confirm": "Добави",
+  "addToKnowledgeBase.error": "Неуспешно добавяне на файла в библиотеката",
+  "addToKnowledgeBase.id.placeholder": "Моля, изберете библиотека, към която да добавите",
+  "addToKnowledgeBase.id.required": "Моля, изберете библиотека",
+  "addToKnowledgeBase.id.title": "Целева библиотека",
+  "addToKnowledgeBase.title": "Добавяне към библиотека",
+  "addToKnowledgeBase.totalFiles": "{{count}} избрани файла",
+  "createNew.confirm": "Създай нова",
+  "createNew.description.label": "Описание на библиотеката (по избор)",
+  "createNew.description.placeholder": "Описанието помага на LLM да разбере по-добре вашата библиотека",
+  "createNew.edit.confirm": "Запази промените",
+  "createNew.edit.title": "Редактиране на библиотека",
+  "createNew.formTitle": "Основна информация",
+  "createNew.name.placeholder": "Име на библиотеката",
+  "createNew.name.required": "Моля, въведете име на библиотеката",
+  "createNew.title": "Създаване на нова библиотека",
+  "moveToKnowledgeBase.error": "Неуспешно преместване на файла в библиотеката",
+  "moveToKnowledgeBase.success": "Файлът беше преместен успешно",
+  "tab.evals": "Оценки",
+  "tab.files": "Файлове",
+  "tab.settings": "Настройки",
+  "tab.testing": "Тест за припомняне",
+  "title": "Библиотека"
 }

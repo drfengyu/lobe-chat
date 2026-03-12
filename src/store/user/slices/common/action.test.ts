@@ -1,14 +1,13 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { withSWR } from '~test-utils';
 
 import { DEFAULT_PREFERENCE } from '@/const/user';
 import { userService } from '@/services/user';
-import { ClientService } from '@/services/user/_deprecated';
 import { useUserStore } from '@/store/user';
-import { preferenceSelectors } from '@/store/user/selectors';
-import { GlobalServerConfig } from '@/types/serverConfig';
-import { UserInitializationState, UserPreference } from '@/types/user';
+import { userGeneralSettingsSelectors } from '@/store/user/selectors';
+import { type GlobalServerConfig } from '@/types/serverConfig';
+import { type UserInitializationState, type UserPreference } from '@/types/user';
+import { withSWR } from '~test-utils';
 
 vi.mock('zustand/traditional');
 
@@ -31,9 +30,7 @@ describe('createCommonSlice', () => {
       const avatar = 'data:image/png;base64,';
 
       const spyOn = vi.spyOn(result.current, 'refreshUserState');
-      const updateAvatarSpy = vi
-        .spyOn(ClientService.prototype, 'updateAvatar')
-        .mockResolvedValue(undefined);
+      const updateAvatarSpy = vi.spyOn(userService, 'updateAvatar').mockResolvedValue({} as any);
 
       await act(async () => {
         await result.current.updateAvatar(avatar);
@@ -81,7 +78,7 @@ describe('createCommonSlice', () => {
           telemetry: true,
         },
         settings: {
-          general: { fontSize: 14 },
+          general: { fontSize: 14, timezone: 'America/New_York' },
         },
         email: 'test@example.com',
       };
@@ -170,7 +167,7 @@ describe('createCommonSlice', () => {
       );
 
       await waitFor(() => {
-        expect(preference.current.data.preference).toEqual(savedPreference);
+        expect(preference.current.data?.preference).toEqual(savedPreference);
         expect(result.current.isUserStateInit).toBeTruthy();
         expect(result.current.preference).toEqual(savedPreference);
       });
@@ -197,7 +194,10 @@ describe('createCommonSlice', () => {
         expect(result.current.isUserStateInit).toBeTruthy();
         // 验证状态未被错误更新
         expect(result.current.user?.avatar).toEqual('abc');
-        expect(result.current.settings).toEqual({});
+        // When settings is null, auto-detect timezone will set it
+        expect(result.current.settings).toEqual({
+          general: { timezone: expect.any(String) },
+        });
       });
     });
 
@@ -235,8 +235,8 @@ describe('createCommonSlice', () => {
       await waitFor(() => expect(result.current.data).toBeUndefined());
     });
 
-    it('should return false when userAllowTrace is already set', async () => {
-      vi.spyOn(preferenceSelectors, 'userAllowTrace').mockReturnValueOnce(true);
+    it('should return false when telemetry is already set', async () => {
+      vi.spyOn(userGeneralSettingsSelectors, 'telemetry').mockReturnValueOnce(true);
 
       const { result } = renderHook(() => useUserStore().useCheckTrace(true), {
         wrapper: withSWR,
@@ -246,7 +246,7 @@ describe('createCommonSlice', () => {
     });
 
     it('should call messageService.messageCountToCheckTrace when needed', async () => {
-      vi.spyOn(preferenceSelectors, 'userAllowTrace').mockReturnValueOnce(null);
+      vi.spyOn(userGeneralSettingsSelectors, 'telemetry').mockReturnValueOnce(undefined as any);
 
       act(() => {
         useUserStore.setState({

@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 
-import { authEnv } from '@/config/auth';
-import { pino } from '@/libs/logger';
-import { NextAuthUserService } from '@/server/services/nextAuthUser';
+import { serverDB } from '@/database/server';
+import { authEnv } from '@/envs/auth';
+import { WebhookUserService } from '@/server/services/webhookUser';
 
 import { validateRequest } from './validateRequest';
 
@@ -18,15 +18,15 @@ export const POST = async (req: Request): Promise<NextResponse> => {
 
   const { event, data } = payload;
 
-  pino.trace(`logto webhook payload: ${{ data, event }}`);
+  console.info(`logto webhook payload: ${{ data, event }}`);
 
-  const nextAuthUserService = new NextAuthUserService();
+  const webhookUserService = new WebhookUserService(serverDB);
   switch (event) {
     case 'User.Data.Updated': {
-      return nextAuthUserService.safeUpdateUser(
+      return webhookUserService.safeUpdateUser(
         {
-          provider: 'logto',
-          providerAccountId: data.id,
+          accountId: data.id,
+          providerId: 'logto',
         },
         {
           avatar: data?.avatar,
@@ -35,9 +35,18 @@ export const POST = async (req: Request): Promise<NextResponse> => {
         },
       );
     }
+    case 'User.SuspensionStatus.Updated': {
+      if (data.isSuspended) {
+        return webhookUserService.safeSignOutUser({
+          accountId: data.id,
+          providerId: 'logto',
+        });
+      }
+      return NextResponse.json({ message: 'user reactivated', success: true }, { status: 200 });
+    }
 
     default: {
-      pino.warn(
+      console.warn(
         `${req.url} received event type "${event}", but no handler is defined for this type`,
       );
       return NextResponse.json({ error: `unrecognised payload type: ${event}` }, { status: 400 });

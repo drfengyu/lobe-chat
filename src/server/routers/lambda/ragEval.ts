@@ -1,4 +1,14 @@
-/* eslint-disable sort-keys-fix/sort-keys-fix  */
+import {
+  type EvalDatasetRecord,
+  type InsertEvalDatasetRecord,
+  type RAGEvalDataSetItem,
+} from '@lobechat/types';
+import {
+  EvalEvaluationStatus,
+  insertEvalDatasetRecordSchema,
+  insertEvalDatasetsSchema,
+  insertEvalEvaluationSchema,
+} from '@lobechat/types';
 import { TRPCError } from '@trpc/server';
 import dayjs from 'dayjs';
 import JSONL from 'jsonl-parse-stringify';
@@ -12,20 +22,11 @@ import {
   EvalDatasetRecordModel,
   EvalEvaluationModel,
   EvaluationRecordModel,
-} from '@/database/server/models/ragEval';
+} from '@/database/models/ragEval';
 import { authedProcedure, router } from '@/libs/trpc/lambda';
 import { keyVaults, serverDatabase } from '@/libs/trpc/lambda/middleware';
 import { createAsyncCaller } from '@/server/routers/async';
 import { FileService } from '@/server/services/file';
-import {
-  EvalDatasetRecord,
-  EvalEvaluationStatus,
-  InsertEvalDatasetRecord,
-  RAGEvalDataSetItem,
-  insertEvalDatasetRecordSchema,
-  insertEvalDatasetsSchema,
-  insertEvalEvaluationSchema,
-} from '@/types/eval';
 
 const ragEvalProcedure = authedProcedure
   .use(serverDatabase)
@@ -35,11 +36,11 @@ const ragEvalProcedure = authedProcedure
 
     return opts.next({
       ctx: {
-        datasetModel: new EvalDatasetModel(ctx.userId),
+        datasetModel: new EvalDatasetModel(ctx.serverDB, ctx.userId),
         fileModel: new FileModel(ctx.serverDB, ctx.userId),
-        datasetRecordModel: new EvalDatasetRecordModel(ctx.userId),
-        evaluationModel: new EvalEvaluationModel(ctx.userId),
-        evaluationRecordModel: new EvaluationRecordModel(ctx.userId),
+        datasetRecordModel: new EvalDatasetRecordModel(ctx.serverDB, ctx.userId),
+        evaluationModel: new EvalEvaluationModel(ctx.serverDB, ctx.userId),
+        evaluationRecordModel: new EvaluationRecordModel(ctx.serverDB, ctx.userId),
         fileService: new FileService(ctx.serverDB, ctx.userId),
       },
     });
@@ -72,7 +73,7 @@ export const ragEvalRouter = router({
     }),
 
   removeDataset: ragEvalProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.string() }))
     .mutation(async ({ input, ctx }) => {
       return ctx.datasetModel.delete(input.id);
     }),
@@ -80,7 +81,7 @@ export const ragEvalRouter = router({
   updateDataset: ragEvalProcedure
     .input(
       z.object({
-        id: z.number(),
+        id: z.string(),
         value: insertEvalDatasetsSchema.partial(),
       }),
     )
@@ -92,7 +93,7 @@ export const ragEvalRouter = router({
   createDatasetRecords: ragEvalProcedure
     .input(
       z.object({
-        datasetId: z.number(),
+        datasetId: z.string(),
         question: z.string(),
         ideal: z.string().optional(),
         referenceFiles: z.array(z.string()).optional(),
@@ -105,13 +106,13 @@ export const ragEvalRouter = router({
     }),
 
   getDatasetRecords: ragEvalProcedure
-    .input(z.object({ datasetId: z.number() }))
+    .input(z.object({ datasetId: z.string() }))
     .query(async ({ ctx, input }): Promise<EvalDatasetRecord[]> => {
       return ctx.datasetRecordModel.query(input.datasetId);
     }),
 
   removeDatasetRecords: ragEvalProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.string() }))
     .mutation(async ({ input, ctx }) => {
       return ctx.datasetRecordModel.delete(input.id);
     }),
@@ -119,7 +120,7 @@ export const ragEvalRouter = router({
   updateDatasetRecords: ragEvalProcedure
     .input(
       z.object({
-        id: z.number(),
+        id: z.string(),
         value: z
           .object({
             question: z.string(),
@@ -137,7 +138,7 @@ export const ragEvalRouter = router({
   importDatasetRecords: ragEvalProcedure
     .input(
       z.object({
-        datasetId: z.number(),
+        datasetId: z.string(),
         pathname: z.string(),
       }),
     )
@@ -173,7 +174,7 @@ export const ragEvalRouter = router({
 
   // Evaluation operations
   startEvaluationTask: ragEvalProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.string() }))
     .mutation(async ({ input, ctx }) => {
       // Start evaluation task
       const evaluation = await ctx.evaluationModel.findById(input.id);
@@ -201,9 +202,9 @@ export const ragEvalRouter = router({
         })),
       );
 
+      // Async router will read keyVaults from DB, no need to pass jwtPayload
       const asyncCaller = await createAsyncCaller({
         userId: ctx.userId,
-        jwtPayload: ctx.jwtPayload,
       });
 
       await ctx.evaluationModel.update(input.id, { status: EvalEvaluationStatus.Processing });
@@ -238,7 +239,7 @@ export const ragEvalRouter = router({
     }),
 
   checkEvaluationStatus: ragEvalProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.string() }))
     .query(async ({ input, ctx }) => {
       const evaluation = await ctx.evaluationModel.findById(input.id);
 
@@ -251,7 +252,7 @@ export const ragEvalRouter = router({
       const isSuccess = records.every((record) => record.status === EvalEvaluationStatus.Success);
 
       if (isSuccess) {
-        // 将结果上传到 S3
+        // Upload results to S3
 
         const evalRecords = records.map((record) => ({
           question: record.question,
@@ -265,7 +266,7 @@ export const ragEvalRouter = router({
 
         await ctx.fileService.uploadContent(path, JSONL.stringify(evalRecords));
 
-        // 保存数据
+        // Save data
         await ctx.evaluationModel.update(input.id, {
           status: EvalEvaluationStatus.Success,
           evalRecordsUrl: await ctx.fileService.getFullFileUrl(path),
@@ -288,7 +289,7 @@ export const ragEvalRouter = router({
     }),
 
   removeEvaluation: ragEvalProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.string() }))
     .mutation(async ({ input, ctx }) => {
       return ctx.evaluationModel.delete(input.id);
     }),

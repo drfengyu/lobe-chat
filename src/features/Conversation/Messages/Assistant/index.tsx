@@ -1,88 +1,138 @@
-import { ReactNode, memo } from 'react';
-import { Flexbox } from 'react-layout-kit';
+'use client';
 
-import { LOADING_FLAT } from '@/const/message';
-import ImageFileListViewer from '@/features/Conversation/Messages/User/ImageFileListViewer';
-import { useChatStore } from '@/store/chat';
-import { aiChatSelectors, chatSelectors } from '@/store/chat/selectors';
-import { ChatMessage } from '@/types/message';
+import { LOADING_FLAT } from '@lobechat/const';
+import isEqual from 'fast-deep-equal';
+import { type MouseEventHandler } from 'react';
+import { memo, useCallback } from 'react';
 
-import { DefaultMessage } from '../Default';
-import FileChunks from './FileChunks';
-import IntentUnderstanding from './IntentUnderstanding';
-import Reasoning from './Reasoning';
-import SearchGrounding from './SearchGrounding';
-import Tool from './Tool';
+import { MESSAGE_ACTION_BAR_PORTAL_ATTRIBUTES } from '@/const/messageActionPortal';
+import { ChatItem } from '@/features/Conversation/ChatItem';
+import { useNewScreen } from '@/features/Conversation/Messages/components/useNewScreen';
 
-export const AssistantMessage = memo<
-  ChatMessage & {
-    editableContent: ReactNode;
-  }
->(({ id, tools, content, chunksList, search, imageList, ...props }) => {
-  const editing = useChatStore(chatSelectors.isMessageEditing(id));
-  const generating = useChatStore(chatSelectors.isMessageGenerating(id));
+import ErrorMessageExtra, { useErrorContent } from '../../Error';
+import { useAgentMeta, useDoubleClickEdit } from '../../hooks';
+import { dataSelectors, messageStateSelectors, useConversationStore } from '../../store';
+import { normalizeThinkTags, processWithArtifact } from '../../utils/markdown';
+import MessageBranch from '../components/MessageBranch';
+import {
+  useSetMessageItemActionElementPortialContext,
+  useSetMessageItemActionTypeContext,
+} from '../Contexts/message-action-context';
+import MessageContent from './components/MessageContent';
+import { AssistantMessageExtra } from './Extra';
 
-  const isToolCallGenerating = generating && (content === LOADING_FLAT || !content) && !!tools;
+const actionBarHolder = (
+  <div {...{ [MESSAGE_ACTION_BAR_PORTAL_ATTRIBUTES.assistant]: '' }} style={{ height: '28px' }} />
+);
 
-  const isReasoning = useChatStore(aiChatSelectors.isMessageInReasoning(id));
+interface AssistantMessageProps {
+  disableEditing?: boolean;
+  id: string;
+  index: number;
+  isLatestItem?: boolean;
+}
 
-  const isIntentUnderstanding = useChatStore(aiChatSelectors.isIntentUnderstanding(id));
+const AssistantMessage = memo<AssistantMessageProps>(
+  ({ id, index, disableEditing, isLatestItem }) => {
+    // Get message and actionsConfig from ConversationStore
+    const item = useConversationStore(dataSelectors.getDisplayMessageById(id), isEqual)!;
 
-  const showSearch = !!search && !!search.citations?.length;
-  const showImageItems = !!imageList && imageList.length > 0;
+    const {
+      agentId,
+      branch,
+      error,
+      role,
+      content,
+      createdAt,
+      tools,
+      extra,
+      model,
+      provider,
+      performance,
+      usage,
+      metadata,
+    } = item;
 
-  // remove \n to avoid empty content
-  // refs: https://github.com/lobehub/lobe-chat/pull/6153
-  const showReasoning =
-    (!!props.reasoning && props.reasoning.content?.trim() !== '') ||
-    (!props.reasoning && isReasoning);
+    const avatar = useAgentMeta(agentId);
 
-  const showFileChunks = !!chunksList && chunksList.length > 0;
+    // Get editing and generating state from ConversationStore
+    const editing = useConversationStore(messageStateSelectors.isMessageEditing(id));
+    const generating = useConversationStore(messageStateSelectors.isMessageGenerating(id));
+    const creating = useConversationStore(messageStateSelectors.isMessageCreating(id));
+    const { minHeight } = useNewScreen({
+      creating: creating || generating,
+      isLatestItem,
+      messageId: id,
+    });
 
-  return editing ? (
-    <DefaultMessage
-      content={content}
-      id={id}
-      isToolCallGenerating={isToolCallGenerating}
-      {...props}
-    />
-  ) : (
-    <Flexbox gap={8} id={id}>
-      {showSearch && (
-        <SearchGrounding citations={search?.citations} searchQueries={search?.searchQueries} />
-      )}
-      {showFileChunks && <FileChunks data={chunksList} />}
-      {showReasoning && <Reasoning {...props.reasoning} id={id} />}
-      {isIntentUnderstanding ? (
-        <IntentUnderstanding />
-      ) : (
-        content && (
-          <DefaultMessage
-            addIdOnDOM={false}
+    const errorContent = useErrorContent(error);
+
+    // remove line breaks in artifact tag to make the ast transform easier
+    const message = !editing ? normalizeThinkTags(processWithArtifact(content)) : content;
+
+    const onDoubleClick = useDoubleClickEdit({ disableEditing, error, id, role });
+    const setMessageItemActionElementPortialContext =
+      useSetMessageItemActionElementPortialContext();
+    const setMessageItemActionTypeContext = useSetMessageItemActionTypeContext();
+
+    const onMouseEnter: MouseEventHandler<HTMLDivElement> = useCallback(
+      (e) => {
+        setMessageItemActionElementPortialContext(e.currentTarget);
+        setMessageItemActionTypeContext({ id, index, type: 'assistant' });
+      },
+      [id, index, setMessageItemActionElementPortialContext, setMessageItemActionTypeContext],
+    );
+
+    return (
+      <ChatItem
+        showTitle
+        aboveMessage={null}
+        avatar={avatar}
+        customErrorRender={(error) => <ErrorMessageExtra data={item} error={error} />}
+        editing={editing}
+        id={id}
+        loading={generating}
+        message={message}
+        newScreenMinHeight={minHeight}
+        placement={'left'}
+        time={createdAt}
+        actions={
+          <>
+            {branch && (
+              <MessageBranch
+                activeBranchIndex={branch.activeBranchIndex}
+                count={branch.count}
+                messageId={id}
+              />
+            )}
+            {actionBarHolder}
+          </>
+        }
+        error={
+          errorContent && error && (message === LOADING_FLAT || !message) ? errorContent : undefined
+        }
+        messageExtra={
+          <AssistantMessageExtra
             content={content}
+            extra={extra}
             id={id}
-            isToolCallGenerating={isToolCallGenerating}
-            {...props}
+            model={model!}
+            performance={performance! || metadata}
+            provider={provider!}
+            tools={tools}
+            usage={usage! || metadata}
           />
-        )
-      )}
-      {showImageItems && <ImageFileListViewer items={imageList} />}
-      {tools && (
-        <Flexbox gap={8}>
-          {tools.map((toolCall, index) => (
-            <Tool
-              apiName={toolCall.apiName}
-              arguments={toolCall.arguments}
-              id={toolCall.id}
-              identifier={toolCall.identifier}
-              index={index}
-              key={toolCall.id}
-              messageId={id}
-              payload={toolCall}
-            />
-          ))}
-        </Flexbox>
-      )}
-    </Flexbox>
-  );
-});
+        }
+        onDoubleClick={onDoubleClick}
+        onMouseEnter={onMouseEnter}
+      >
+        <MessageContent {...item} />
+      </ChatItem>
+    );
+  },
+  isEqual,
+);
+
+AssistantMessage.displayName = 'AssistantMessage';
+
+export default AssistantMessage;

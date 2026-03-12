@@ -1,25 +1,17 @@
+import { type ChatCompletionErrorPayload } from '@lobechat/model-runtime';
+import { ChatErrorType } from '@lobechat/types';
 import { NextResponse } from 'next/server';
 
 import { checkAuth } from '@/app/(backend)/middleware/auth';
-import { ChatCompletionErrorPayload, ModelProvider } from '@/libs/model-runtime';
-import { initAgentRuntimeWithUserPayload } from '@/server/modules/AgentRuntime';
-import { ChatErrorType } from '@/types/fetch';
+import { initModelRuntimeFromDB } from '@/server/modules/ModelRuntime';
 import { createErrorResponse } from '@/utils/errorResponse';
 
-export const runtime = 'edge';
-
-const noNeedAPIKey = (provider: string) => [ModelProvider.OpenRouter].includes(provider as any);
-
-export const GET = checkAuth(async (req, { params, jwtPayload }) => {
-  const { provider } = await params;
+export const GET = checkAuth(async (req, { params, userId, serverDB }) => {
+  const provider = (await params)!.provider!;
 
   try {
-    const hasDefaultApiKey = jwtPayload.apiKey || 'dont-need-api-key-for-model-list';
-
-    const agentRuntime = await initAgentRuntimeWithUserPayload(provider, {
-      ...jwtPayload,
-      apiKey: noNeedAPIKey(provider) ? hasDefaultApiKey : jwtPayload.apiKey,
-    });
+    // Read user's provider config from database
+    const agentRuntime = await initModelRuntimeFromDB(serverDB, userId, provider);
 
     const list = await agentRuntime.models();
 
@@ -35,6 +27,10 @@ export const GET = checkAuth(async (req, { params, jwtPayload }) => {
     // track the error at server side
     console.error(`Route: [${provider}] ${errorType}:`, error);
 
-    return createErrorResponse(errorType, { error, ...res, provider });
+    // Sanitize error to avoid exposing stack traces to users
+    const sanitizedError =
+      error instanceof Error ? { message: error.message, name: error.name } : error;
+
+    return createErrorResponse(errorType, { error: sanitizedError, ...res, provider });
   }
 });

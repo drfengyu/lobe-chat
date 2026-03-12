@@ -1,17 +1,9 @@
-import { PropsWithChildren } from 'react';
+import { type PropsWithChildren } from 'react';
 
-import { authEnv } from '@/config/auth';
-
-import Clerk from './Clerk';
-import NextAuth from './NextAuth';
-import NoAuth from './NoAuth';
-
+// Next.js only serves auth routes (signin, signup, reset-password, etc.)
+// No store initialization needed here — session sync happens in the Vite SPA after login.
 const AuthProvider = ({ children }: PropsWithChildren) => {
-  if (authEnv.NEXT_PUBLIC_ENABLE_CLERK_AUTH) return <Clerk>{children}</Clerk>;
-
-  if (authEnv.NEXT_PUBLIC_ENABLE_NEXT_AUTH) return <NextAuth>{children}</NextAuth>;
-
-  return <NoAuth>{children}</NoAuth>;
+  return <>{children}</>;
 };
 
 export default AuthProvider;

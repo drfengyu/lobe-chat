@@ -1,196 +1,238 @@
 name: Release Desktop Beta
 
+# ============================================
+# Beta 频道发版工作流
+# ============================================
+# 触发条件: 发布包含 pre-release 标识的 release
+# 如: v2.0.0-beta.1, v2.0.0-alpha.1, v2.0.0-rc.1
+#
+# 注意: Stable 版本 (如 v2.0.0) 由 release-desktop-stable.yml 处理
+# 注意: Nightly 版本 (如 v2.1.0-nightly.xxx) 由 release-desktop-nightly.yml 处理
+# ============================================
+
 on:
   release:
-    types: [published] # 发布 release 时触发构建
+    types: [published]
 
-# 确保同一时间只运行一个相同的 workflow，取消正在进行的旧的运行
 concurrency:
   group: ${{ github.ref }}-${{ github.workflow }}
   cancel-in-progress: true
 
-# Add default permissions
 permissions: read-all
 
+env:
+  NODE_VERSION: '24.11.1'
+
 jobs:
-  test:
-    name: Code quality check
-    # 添加 PR label 触发条件，只有添加了 Build Desktop 标签的 PR 才会触发构建
-    runs-on: ubuntu-latest # 只在 ubuntu 上运行一次检查
-    steps:
-      - name: Checkout base
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 9
-
-      - name: Install deps
-        run: pnpm install
-
-      - name: Lint
-        run: pnpm run lint
-
-  version:
-    name: Determine version
+  # ============================================
+  # 检查是否为 Beta 版本 (排除 Stable 和 Nightly)
+  # ============================================
+  check-beta:
+    name: Check if Beta Release
     runs-on: ubuntu-latest
     outputs:
-      # 输出版本信息，供后续 job 使用
-      version: ${{ steps.set_version.outputs.version }}
-      is_pr_build: ${{ steps.set_version.outputs.is_pr_build }}
+      is_beta: ${{ steps.check.outputs.is_beta }}
+      version: ${{ steps.check.outputs.version }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      # 主要逻辑：确定构建版本号
-      - name: Set version
-        id: set_version
+      - name: Check release tag
+        id: check
         run: |
-          # 从 apps/desktop/package.json 读取基础版本号
-          base_version=$(node -p "require('./apps/desktop/package.json').version")
-
-          # Release 事件直接使用 release tag 作为版本号，去掉可能的 v 前缀
           version="${{ github.event.release.tag_name }}"
           version="${version#v}"
           echo "version=${version}" >> $GITHUB_OUTPUT
-          echo "📦 Release Version: ${version}"
 
-      # 输出版本信息总结，方便在 GitHub Actions 界面查看
-      - name: Version Summary
-        run: |
-          echo "🚦 Release Version: ${{ steps.set_version.outputs.version }}"
+          # Beta 版本包含 beta/alpha/rc (nightly 由 release-desktop-nightly.yml 处理)
+          if [[ "$version" == *"nightly"* ]]; then
+            echo "is_beta=false" >> $GITHUB_OUTPUT
+            echo "⏭️ Skipping: $version is a nightly release (handled by release-desktop-nightly.yml)"
+          elif [[ "$version" == *"beta"* ]] || [[ "$version" == *"alpha"* ]] || [[ "$version" == *"rc"* ]]; then
+            echo "is_beta=true" >> $GITHUB_OUTPUT
+            echo "✅ Beta release detected: $version"
+          else
+            echo "is_beta=false" >> $GITHUB_OUTPUT
+            echo "⏭️ Skipping: $version is a stable release (handled by release-desktop-stable.yml)"
+          fi
+
+  test:
+    name: Code quality check
+    needs: [check-beta]
+    if: needs.check-beta.outputs.is_beta == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout base
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install deps
+        run: bun i
+
+      - name: Lint
+        run: bun run lint
 
   build:
-    needs: [version, test]
+    needs: [check-beta]
+    if: needs.check-beta.outputs.is_beta == 'true'
     name: Build Desktop App
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macos-latest, windows-2025, ubuntu-latest]
+        os: [macos-latest, macos-15-intel, windows-2025, ubuntu-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
+
+      - name: Setup build environment
+        uses: ./.github/actions/desktop-build-setup
         with:
-          fetch-depth: 0
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 9
-
-      # node-linker=hoisted 模式将可以确保 asar 压缩可用
-      - name: Install deps
-        run: pnpm install --node-linker=hoisted
-
-      - name: Install deps on Desktop
-        run: npm run install-isolated --prefix=./apps/desktop
-
-      # 设置 package.json 的版本号
       - name: Set package version
-        run: npm run workflow:set-desktop-version ${{ needs.version.outputs.version }} beta
+        run: npm run workflow:set-desktop-version ${{ needs.check-beta.outputs.version }} beta
 
-      # macOS 构建处理
+      # macOS 构建
       - name: Build artifact on macOS
         if: runner.os == 'macOS'
-        run: npm run desktop:build
+        run: npm run desktop:package:app
         env:
+          UPDATE_CHANNEL: beta
           APP_URL: http://localhost:3015
           DATABASE_URL: 'postgresql://postgres@localhost:5432/postgres'
-          # 默认添加一个加密 SECRET
           KEY_VAULTS_SECRET: 'oLXWIiR/AKF+rWaqy9lHkrYgzpATbW3CtJp3UfkVgpE='
-          # macOS 签名和公证配置
           CSC_LINK: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
           CSC_KEY_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          # allow provisionally
           CSC_FOR_PULL_REQUEST: true
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-
           NEXT_PUBLIC_DESKTOP_PROJECT_ID: ${{ secrets.UMAMI_BETA_DESKTOP_PROJECT_ID }}
           NEXT_PUBLIC_DESKTOP_UMAMI_BASE_URL: ${{ secrets.UMAMI_BETA_DESKTOP_BASE_URL }}
 
-      #  Windows 平台构建处理
+      # Windows 构建
       - name: Build artifact on Windows
         if: runner.os == 'Windows'
-        run: npm run desktop:build
+        run: npm run desktop:package:app
         env:
+          UPDATE_CHANNEL: beta
           APP_URL: http://localhost:3015
           DATABASE_URL: 'postgresql://postgres@localhost:5432/postgres'
           KEY_VAULTS_SECRET: 'oLXWIiR/AKF+rWaqy9lHkrYgzpATbW3CtJp3UfkVgpE='
           NEXT_PUBLIC_DESKTOP_PROJECT_ID: ${{ secrets.UMAMI_BETA_DESKTOP_PROJECT_ID }}
           NEXT_PUBLIC_DESKTOP_UMAMI_BASE_URL: ${{ secrets.UMAMI_BETA_DESKTOP_BASE_URL }}
-
-          # 将 TEMP 和 TMP 目录设置到 C 盘
           TEMP: C:\temp
           TMP: C:\temp
 
-      # Linux 平台构建处理
+      # Linux 构建
       - name: Build artifact on Linux
         if: runner.os == 'Linux'
-        run: npm run desktop:build
+        run: npm run desktop:package:app
         env:
+          UPDATE_CHANNEL: beta
           APP_URL: http://localhost:3015
           DATABASE_URL: 'postgresql://postgres@localhost:5432/postgres'
           KEY_VAULTS_SECRET: 'oLXWIiR/AKF+rWaqy9lHkrYgzpATbW3CtJp3UfkVgpE='
           NEXT_PUBLIC_DESKTOP_PROJECT_ID: ${{ secrets.UMAMI_BETA_DESKTOP_PROJECT_ID }}
           NEXT_PUBLIC_DESKTOP_UMAMI_BASE_URL: ${{ secrets.UMAMI_BETA_DESKTOP_BASE_URL }}
 
-      # 上传构建产物，移除了 zip 相关部分
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: Upload artifacts
+        uses: ./.github/actions/desktop-upload-artifacts
         with:
-          name: release-${{ matrix.os }}
-          path: |
-            apps/desktop/release/latest*
-            apps/desktop/release/*.dmg*
-            apps/desktop/release/*.zip*
-            apps/desktop/release/*.exe*
-            apps/desktop/release/*.AppImage
-          retention-days: 5
+          artifact-name: release-${{ matrix.os }}
 
-  # 正式版发布 job
-  publish-release:
-    needs: [build, version]
-    name: Publish Beta Release
+  # 汇总门禁: test/build 完成后决定是否继续
+  gate:
+    needs: [check-beta, test, build]
+    if: ${{ needs.check-beta.outputs.is_beta == 'true' && needs.test.result == 'success' && needs.build.result == 'success' }}
+    name: Gate for publish
     runs-on: ubuntu-latest
-    # Grant write permission to contents for uploading release assets
+    steps:
+      - name: Gate passed
+        run: echo "Gate passed"
+
+  # 合并 macOS 多架构 latest-mac.yml 文件
+  merge-mac-files:
+    needs: [gate]
+    name: Merge macOS Release Files
+    runs-on: ubuntu-latest
     permissions:
       contents: write
-    outputs:
-      artifact_path: ${{ steps.set_path.outputs.path }}
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+
+      - name: Install bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
       # 下载所有平台的构建产物
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: release
           pattern: release-*
           merge-multiple: true
 
-      # 列出所有构建产物
-      - name: List artifacts
+      # 列出下载的构建产物
+      - name: List downloaded artifacts
         run: ls -R release
 
-      # 将构建产物上传到现有 release
+      # 仅为该步骤在脚本目录安装 yaml 单包，避免安装整个 monorepo 依赖
+      - name: Install yaml only for merge step
+        run: |
+          cd scripts/electronWorkflow
+          # 在脚本目录创建最小 package.json，防止 bun 向上寻找根 package.json
+          if [ ! -f package.json ]; then
+            echo '{"name":"merge-mac-release","private":true}' > package.json
+          fi
+          bun add --no-save yaml@2.8.1
+
+      # 合并 macOS YAML 文件 (使用 bun 运行 JavaScript)
+      - name: Merge latest-mac.yml files
+        run: bun run scripts/electronWorkflow/mergeMacReleaseFiles.js
+
+      # 上传合并后的构建产物
+      - name: Upload artifacts with merged macOS files
+        uses: actions/upload-artifact@v6
+        with:
+          name: merged-release
+          path: release/
+          retention-days: 1
+
+  # 发布所有平台构建产物
+  publish-release:
+    needs: [merge-mac-files]
+    name: Publish Beta Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # 下载合并后的构建产物
+      - name: Download merged artifacts
+        uses: actions/download-artifact@v7
+        with:
+          name: merged-release
+          path: release
+
+      # 列出所有构建产物
+      - name: List final artifacts
+        run: ls -R release
+
+      # 将构建产物上传到现有 release (现在包含合并后的 latest-mac.yml)
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
         with:
@@ -201,5 +243,9 @@ jobs:
             release/*.zip*
             release/*.exe*
             release/*.AppImage
+            release/*.deb*
+            release/*.snap*
+            release/*.rpm*
+            release/*.tar.gz*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

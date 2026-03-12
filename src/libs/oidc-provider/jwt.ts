@@ -1,34 +1,41 @@
 import { TRPCError } from '@trpc/server';
 import debug from 'debug';
-import { importJWK, jwtVerify } from 'jose';
 
-import { oidcEnv } from '@/envs/oidc';
+import { authEnv } from '@/envs/auth';
 
 const log = debug('oidc-jwt');
 
 /**
- * 从环境变量中获取 JWKS
- * 该 JWKS 是一个包含 RS256 私钥的 JSON 对象
+ * Get JWKS key string from environment
+ * Uses JWKS_KEY which already has fallback to OIDC_JWKS_KEY in authEnv
+ */
+const getJwksKeyString = () => {
+  return authEnv.JWKS_KEY;
+};
+
+/**
+ * Get JWKS from environment variables
+ * This JWKS is a JSON object containing RS256 private keys
  */
 export const getJWKS = (): object => {
   try {
-    const jwksString = oidcEnv.OIDC_JWKS_KEY;
+    const jwksString = getJwksKeyString();
 
     if (!jwksString) {
       throw new Error(
-        'OIDC_JWKS_KEY 环境变量是必需的。请使用 scripts/generate-oidc-jwk.mjs 生成 JWKS。',
+        'JWKS_KEY 环境变量是必需的。请使用 scripts/generate-oidc-jwk.mjs 生成 JWKS。',
       );
     }
 
-    // 尝试解析 JWKS JSON 字符串
+    // Attempt to parse JWKS JSON string
     const jwks = JSON.parse(jwksString);
 
-    // 检查 JWKS 格式是否正确
+    // Check if JWKS format is valid
     if (!jwks.keys || !Array.isArray(jwks.keys) || jwks.keys.length === 0) {
       throw new Error('JWKS 格式无效: 缺少或为空的 keys 数组');
     }
 
-    // 检查是否有 RS256 算法的密钥
+    // Check if there is an RS256 algorithm key
     const hasRS256Key = jwks.keys.some((key: any) => key.alg === 'RS256' && key.kty === 'RSA');
     if (!hasRS256Key) {
       throw new Error('JWKS 中没有找到 RS256 算法的 RSA 密钥');
@@ -37,19 +44,16 @@ export const getJWKS = (): object => {
     return jwks;
   } catch (error) {
     console.error('解析 JWKS 失败:', error);
-    throw new Error(`OIDC_JWKS_KEY 解析错误: ${(error as Error).message}`);
+    throw new Error(`JWKS_KEY 解析错误: ${(error as Error).message}`, { cause: error });
   }
 };
 
-/**
- * 从环境变量中获取 JWKS 并提取第一个 RSA 密钥
- */
-const getJWKSPublicKey = async () => {
+const getVerificationKey = async () => {
   try {
-    const jwksString = oidcEnv.OIDC_JWKS_KEY;
+    const jwksString = getJwksKeyString();
 
     if (!jwksString) {
-      throw new Error('OIDC_JWKS_KEY 环境变量未设置');
+      throw new Error('JWKS_KEY 环境变量未设置');
     }
 
     const jwks = JSON.parse(jwksString);
@@ -58,46 +62,62 @@ const getJWKSPublicKey = async () => {
       throw new Error('JWKS 格式无效: 缺少或为空的 keys 数组');
     }
 
-    // 查找 RS256 算法的 RSA 密钥
-    const rsaKey = jwks.keys.find((key: any) => key.alg === 'RS256' && key.kty === 'RSA');
-
-    if (!rsaKey) {
+    const privateRsaKey = jwks.keys.find((key: any) => key.alg === 'RS256' && key.kty === 'RSA');
+    if (!privateRsaKey) {
       throw new Error('JWKS 中没有找到 RS256 算法的 RSA 密钥');
     }
 
-    // 导入 JWK 为公钥
-    const publicKey = await importJWK(rsaKey, 'RS256');
+    // Create a “clean” JWK object containing only public key components.
+    // The key fields of an RSA public key are kty, n, e. Others like kid, alg, use are also public.
+    const publicKeyJwk = {
+      alg: privateRsaKey.alg,
+      e: privateRsaKey.e,
+      kid: privateRsaKey.kid,
+      kty: privateRsaKey.kty,
+      n: privateRsaKey.n,
+      use: privateRsaKey.use,
+    };
 
-    return publicKey;
+    // Remove any undefined fields to keep the object clean
+    Object.keys(publicKeyJwk).forEach(
+      (key) => (publicKeyJwk as any)[key] === undefined && delete (publicKeyJwk as any)[key],
+    );
+
+    const { importJWK } = await import('jose');
+
+    // Now, in any environment, `importJWK` will correctly identify this object as a public key.
+    return await importJWK(publicKeyJwk, 'RS256');
   } catch (error) {
     log('获取 JWKS 公钥失败: %O', error);
-    throw new Error(`JWKS 公钥获取失败: ${(error as Error).message}`);
+    throw new Error(`JWKS_KEY 公钥获取失败: ${(error as Error).message}`, { cause: error });
   }
 };
 
 /**
- * 验证 OIDC JWT Access Token
+ * Validate OIDC JWT Access Token
  * @param token - JWT access token
- * @returns 解析后的 token payload 和用户信息
+ * @returns Parsed token payload and user information
  */
 export const validateOIDCJWT = async (token: string) => {
   try {
     log('开始验证 OIDC JWT token');
 
-    // 获取公钥
-    const publicKey = await getJWKSPublicKey();
+    // Get public key
+    const publicKey = await getVerificationKey();
 
-    // 验证 JWT
+    // Verify JWT
+    const { jwtVerify } = await import('jose');
     const { payload } = await jwtVerify(token, publicKey, {
       algorithms: ['RS256'],
-      // 可以添加其他验证选项，如 issuer、audience 等
+      // Additional validation options can be added, such as issuer, audience, etc.
     });
 
     log('JWT 验证成功，payload: %O', payload);
 
-    // 提取用户信息
+    // Extract user information
     const userId = payload.sub;
-    const clientId = payload.aud;
+    const clientId = payload.client_id;
+    const aud = payload.aud;
 
     if (!userId) {
       throw new TRPCError({
@@ -110,7 +130,7 @@ export const validateOIDCJWT = async (token: string) => {
       clientId,
       payload,
       tokenData: {
-        aud: clientId,
+        aud,
         client_id: clientId,
         exp: payload.exp,
         iat: payload.iat,

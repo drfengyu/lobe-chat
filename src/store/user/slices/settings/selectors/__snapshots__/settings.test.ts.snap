@@ -51,34 +51,34 @@ exports[`settingsSelectors > currentSettings > should merge DEFAULT_SETTINGS and
 exports[`settingsSelectors > currentSystemAgent > should merge DEFAULT_SYSTEM_AGENT_CONFIG and s.settings.systemAgent correctly 1`] = `
 {
   "agentMeta": {
-    "model": "gpt-4.1-mini",
-    "provider": "openai",
+    "model": "claude-sonnet-4-5-20250929",
+    "provider": "anthropic",
   },
   "enableAutoReply": true,
   "generationTopic": {
-    "model": "gpt-4.1-mini",
+    "model": "gpt-5-mini",
     "provider": "openai",
   },
   "historyCompress": {
-    "model": "gpt-4.1-mini",
-    "provider": "openai",
+    "model": "claude-sonnet-4-5-20250929",
+    "provider": "anthropic",
   },
   "queryRewrite": {
     "enabled": true,
-    "model": "gpt-4.1-mini",
+    "model": "gpt-5-mini",
     "provider": "openai",
   },
   "replyMessage": "Custom auto reply",
   "thread": {
-    "model": "gpt-4.1-mini",
-    "provider": "openai",
+    "model": "claude-sonnet-4-5-20250929",
+    "provider": "anthropic",
   },
   "topic": {
-    "model": "gpt-4.1-mini",
+    "model": "gpt-5-mini",
     "provider": "openai",
   },
   "translation": {
-    "model": "gpt-4.1-mini",
+    "model": "gpt-5-mini",
     "provider": "openai",
   },
 }
@@ -95,30 +95,24 @@ exports[`settingsSelectors > currentTTS > should merge DEFAULT_TTS_CONFIG and s.
 }
 `;
 
-exports[`settingsSelectors > dalleConfig > should return the dalle configuration 1`] = `
-{
-  "apiKey": "dalle-api-key",
-  "autoGenerate": true,
-}
-`;
-
 exports[`settingsSelectors > defaultAgent > should merge DEFAULT_AGENT and s.settings.defaultAgent correctly 1`] = `
 {
   "config": {
     "chatConfig": {
       "autoCreateTopicThreshold": 2,
-      "displayMode": "chat",
       "enableAutoCreateTopic": true,
       "enableCompressHistory": true,
+      "enableContextCompression": true,
       "enableHistoryCount": true,
       "enableReasoning": false,
+      "enableStreaming": true,
       "historyCount": 20,
       "reasoningBudgetToken": 1024,
       "searchFCModel": {
-        "model": "gpt-4.1-mini",
-        "provider": "openai",
+        "model": "claude-sonnet-4-5-20250929",
+        "provider": "anthropic",
       },
-      "searchMode": "off",
+      "searchMode": "auto",
     },
     "model": "gpt-3.5-turbo",
     "openingQuestions": [],
@@ -129,7 +123,7 @@ exports[`settingsSelectors > defaultAgent > should merge DEFAULT_AGENT and s.set
       "top_p": 1,
     },
     "plugins": [],
-    "provider": "openai",
+    "provider": "anthropic",
     "systemRole": "user",
     "tts": {
       "showAllLocaleVoice": false,
@@ -151,18 +145,19 @@ exports[`settingsSelectors > defaultAgentConfig > should merge DEFAULT_AGENT_CON
 {
   "chatConfig": {
     "autoCreateTopicThreshold": 2,
-    "displayMode": "chat",
     "enableAutoCreateTopic": true,
     "enableCompressHistory": true,
+    "enableContextCompression": true,
     "enableHistoryCount": true,
     "enableReasoning": false,
+    "enableStreaming": true,
     "historyCount": 20,
     "reasoningBudgetToken": 1024,
     "searchFCModel": {
-      "model": "gpt-4.1-mini",
-      "provider": "openai",
+      "model": "claude-sonnet-4-5-20250929",
+      "provider": "anthropic",
     },
-    "searchMode": "off",
+    "searchMode": "auto",
   },
   "model": "gpt-4",
   "openingQuestions": [],
@@ -173,7 +168,7 @@ exports[`settingsSelectors > defaultAgentConfig > should merge DEFAULT_AGENT_CON
     "top_p": 1,
   },
   "plugins": [],
-  "provider": "openai",
+  "provider": "anthropic",
   "systemRole": "custom role",
   "tts": {
     "showAllLocaleVoice": false,

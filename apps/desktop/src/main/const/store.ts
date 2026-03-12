@@ -1,14 +1,15 @@
 /**
- * 应用设置存储相关常量
+ * Application settings storage related constants
  */
-import { NetworkProxySettings } from '@lobechat/electron-client-ipc';
+import type { NetworkProxySettings } from '@lobechat/electron-client-ipc';
 
 import { appStorageDir } from '@/const/dir';
+import { UPDATE_CHANNEL } from '@/modules/updater/configs';
 import { DEFAULT_SHORTCUTS_CONFIG } from '@/shortcuts';
-import { ElectronMainStore } from '@/types/store';
+import type { ElectronMainStore } from '@/types/store';
 
 /**
- * 存储名称
+ * Storage name
  */
 export const STORE_NAME = 'lobehub-settings';
 
@@ -22,13 +23,15 @@ export const defaultProxySettings: NetworkProxySettings = {
 };
 
 /**
- * 存储默认值
+ * Storage default values
  */
 export const STORE_DEFAULTS: ElectronMainStore = {
-  dataSyncConfig: { storageMode: 'local' },
+  dataSyncConfig: { storageMode: 'cloud' },
   encryptedTokens: {},
   locale: 'auto',
   networkProxy: defaultProxySettings,
   shortcuts: DEFAULT_SHORTCUTS_CONFIG,
   storagePath: appStorageDir,
+  themeMode: 'system',
+  updateChannel: UPDATE_CHANNEL,
 };

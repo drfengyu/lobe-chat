@@ -1,17 +1,17 @@
-import { Block, Collapse, Highlighter, Icon, Markdown, Tag } from '@lobehub/ui';
-import { Empty } from 'antd';
-import { CheckIcon, MinusIcon } from 'lucide-react';
-import { markdownToTxt } from 'markdown-to-txt';
+import { Block, Collapse, Empty, Highlighter, Icon, Markdown, Tag } from '@lobehub/ui';
+import { cssVar } from 'antd-style';
+import { CheckIcon, MinusIcon, Wrench } from 'lucide-react';
 import { memo } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import InlineTable from '@/components/InlineTable';
+import Title from '@/routes/(main)/community/features/Title';
+import { markdownToTxt } from '@/utils/markdownToTxt';
 
-import Title from '../../../app/[variants]/(main)/discover/features/Title';
 import CollapseDesc from '../CollapseDesc';
 import CollapseLayout from '../CollapseLayout';
 import { useDetailContext } from '../DetailProvider';
-import { useStyles } from './style';
+import { styles } from './style';
 import { ModeType } from './types';
 
 interface ToolsProps {
@@ -21,16 +21,17 @@ interface ToolsProps {
 }
 
 const Tools = memo<ToolsProps>(({ mode, activeKey = [], setActiveKey }) => {
-  const { t } = useTranslation('discover');
+  const { t } = useTranslation(['discover', 'plugin']);
   const { tools } = useDetailContext();
-  const { styles, theme } = useStyles();
 
   if (!tools)
     return (
       <Block variant={'outlined'}>
         <Empty
-          description={t('mcp.details.schema.tools.empty')}
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={t('plugin:mcpEmpty.tools')}
+          descriptionProps={{ fontSize: 14 }}
+          icon={Wrench}
+          style={{ maxWidth: 400 }}
         />
       </Block>
     );
@@ -38,8 +39,9 @@ const Tools = memo<ToolsProps>(({ mode, activeKey = [], setActiveKey }) => {
   return (
     <Collapse
       activeKey={activeKey}
-      expandIconPosition={'end'}
+      expandIconPlacement={'end'}
       gap={8}
+      variant={'outlined'}
       items={tools.map((item) => {
         let properties: {
           description?: string;
@@ -70,6 +72,9 @@ const Tools = memo<ToolsProps>(({ mode, activeKey = [], setActiveKey }) => {
                   children:
                     mode === ModeType.Docs ? (
                       <InlineTable
+                        dataSource={properties}
+                        pagination={false}
+                        rowKey={'name'}
                         columns={[
                           {
                             dataIndex: 'name',
@@ -77,7 +82,7 @@ const Tools = memo<ToolsProps>(({ mode, activeKey = [], setActiveKey }) => {
                               <span
                                 className={styles.code}
                                 style={{
-                                  color: theme.gold,
+                                  color: cssVar.gold,
                                 }}
                               >
                                 {record.name}
@@ -94,10 +99,12 @@ const Tools = memo<ToolsProps>(({ mode, activeKey = [], setActiveKey }) => {
                             dataIndex: 'required',
                             render: (_, record) => (
                               <Icon
-                                color={
-                                  record.required ? theme.colorSuccess : theme.colorTextDescription
-                                }
                                 icon={record.required ? CheckIcon : MinusIcon}
+                                color={
+                                  record.required
+                                    ? cssVar.colorSuccess
+                                    : cssVar.colorTextDescription
+                                }
                               />
                             ),
                             title: t('mcp.details.schema.tools.table.required'),
@@ -107,9 +114,6 @@ const Tools = memo<ToolsProps>(({ mode, activeKey = [], setActiveKey }) => {
                             title: t('mcp.details.schema.tools.table.description'),
                           },
                         ]}
-                        dataSource={properties}
-                        pagination={false}
-                        rowKey={'name'}
                       />
                     ) : (
                       <Highlighter
@@ -140,7 +144,6 @@ const Tools = memo<ToolsProps>(({ mode, activeKey = [], setActiveKey }) => {
         };
       })}
       onChange={setActiveKey}
-      variant={'outlined'}
     />
   );
 });

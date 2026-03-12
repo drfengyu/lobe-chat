@@ -1,10 +1,10 @@
-import { MetadataRoute } from 'next';
+import { type MetadataRoute } from 'next';
 
 import { Sitemap } from '@/server/sitemap';
 import { getCanonicalUrl } from '@/server/utils/url';
 
-// Robots文件缓存配置 - 24小时重新验证
-export const revalidate = 86_400; // 24小时 - 内容页面缓存
+// Robots file cache configuration - revalidate every 24 hours
+export const revalidate = 86_400; // 24 hours - content page cache
 export const dynamic = 'force-static';
 
 const robots = (): MetadataRoute.Robots => {
@@ -13,20 +13,20 @@ const robots = (): MetadataRoute.Robots => {
     host: getCanonicalUrl(),
     rules: [
       {
-        allow: ['/discover/*'],
+        allow: ['/community/*'],
         userAgent: ['Facebot', 'facebookexternalhit'],
       },
       {
-        allow: ['/discover/*'],
+        allow: ['/community/*'],
         userAgent: 'LinkedInBot',
       },
       {
-        allow: ['/discover/*'],
+        allow: ['/community/*'],
         userAgent: 'Twitterbot',
       },
       {
         allow: ['/'],
-        disallow: ['/api/*', '/login', '/signup', '/files', '/repos/*'],
+        disallow: ['/api/*', '/signin', '/signup', '/knowledge/*', '/share/*'],
         userAgent: '*',
       },
     ],

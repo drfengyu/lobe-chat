@@ -1,13 +1,8 @@
 import { act } from '@testing-library/react';
+import { ModelProvider } from 'model-bank';
 import { describe, expect, it, vi } from 'vitest';
 
-import { ModelProvider } from '@/libs/model-runtime';
 import { useUserStore } from '@/store/user';
-import {
-  GlobalLLMProviderKey,
-  UserKeyVaults,
-  UserModelProviderConfig,
-} from '@/types/user/settings';
 
 import { getProviderAuthPayload } from '../_auth';
 
@@ -23,10 +18,7 @@ const mockTogetherAIAPIKey = 'togetherai-api-key';
 // mock the traditional zustand
 vi.mock('zustand/traditional');
 
-const setModelProviderConfig = <T extends GlobalLLMProviderKey>(
-  provider: T,
-  config: Partial<UserKeyVaults[T]>,
-) => {
+const setModelProviderConfig = (provider: string, config: any) => {
   useUserStore.setState({
     settings: { keyVaults: { [provider]: config } },
   });
@@ -172,6 +164,20 @@ describe('getProviderAuthPayload', () => {
       apiKey: mockCloudflareConfig.apiKey,
       baseURLOrAccountID: mockCloudflareConfig.baseURLOrAccountID,
       cloudflareBaseURLOrAccountID: mockCloudflareConfig.baseURLOrAccountID,
+    });
+  });
+
+  it('should return correct payload for VertexAI provider without splitting JSON credentials', () => {
+    // Vertex AI uses JSON credentials that contain commas
+    const mockVertexAIConfig = {
+      apiKey: '{"type":"service_account","project_id":"test-project","private_key":"test-key"}',
+      baseURL: 'https://us-central1-aiplatform.googleapis.com',
+    };
+
+    const payload = getProviderAuthPayload(ModelProvider.VertexAI, mockVertexAIConfig);
+    expect(payload).toEqual({
+      apiKey: mockVertexAIConfig.apiKey,
+      baseURL: mockVertexAIConfig.baseURL,
     });
   });
 

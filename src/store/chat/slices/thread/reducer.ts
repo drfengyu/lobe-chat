@@ -1,17 +1,17 @@
 import { produce } from 'immer';
 
-import { ThreadItem } from '@/types/topic';
+import { type ThreadItem } from '@/types/topic';
 
-interface UpdateThreadAction {
+type UpdateThreadAction = {
   id: string;
   type: 'updateThread';
   value: Partial<ThreadItem>;
-}
+};
 
-interface DeleteThreadAction {
+type DeleteThreadAction = {
   id: string;
   type: 'deleteThread';
-}
+};
 
 export type ThreadDispatch = UpdateThreadAction | DeleteThreadAction;
 

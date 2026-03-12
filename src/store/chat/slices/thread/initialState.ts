@@ -1,4 +1,5 @@
-import { ThreadItem, ThreadType } from '@/types/topic';
+import { type IThreadType, type ThreadItem } from '@lobechat/types';
+import { ThreadType } from '@lobechat/types';
 
 export interface ChatThreadState {
   activeThreadId?: string;
@@ -7,7 +8,7 @@ export interface ChatThreadState {
    */
   isCreatingThread?: boolean;
   isCreatingThreadMessage?: boolean;
-  newThreadMode: ThreadType;
+  newThreadMode: IThreadType;
   /**
    * if true it mean to start to fork a new thread
    */
@@ -17,11 +18,11 @@ export interface ChatThreadState {
   threadLoadingIds: string[];
   threadMaps: Record<string, ThreadItem[]>;
   threadRenamingId?: string;
+  threadsInit?: boolean;
   /**
    * when open thread creator, set the message id to it
    */
-  threadStartMessageId?: string;
-  threadsInit?: boolean;
+  threadStartMessageId?: string | null;
 }
 
 export const initialThreadState: ChatThreadState = {

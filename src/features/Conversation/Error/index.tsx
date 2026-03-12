@@ -1,26 +1,46 @@
-import { IPluginErrorType } from '@lobehub/chat-plugin-sdk';
-import type { AlertProps } from '@lobehub/ui';
-import { Skeleton } from 'antd';
-import dynamic from 'next/dynamic';
-import { Suspense, memo, useMemo } from 'react';
+import { ENABLE_BUSINESS_FEATURES } from '@lobechat/business-const';
+import { type ILobeAgentRuntimeErrorType } from '@lobechat/model-runtime';
+import { AgentRuntimeErrorType } from '@lobechat/model-runtime';
+import { type ChatMessageError, type ErrorType } from '@lobechat/types';
+import { ChatErrorType } from '@lobechat/types';
+import { type IPluginErrorType } from '@lobehub/chat-plugin-sdk';
+import { type AlertProps } from '@lobehub/ui';
+import { Block, Highlighter, Skeleton } from '@lobehub/ui';
+import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import useBusinessErrorAlertConfig from '@/business/client/hooks/useBusinessErrorAlertConfig';
+import useBusinessErrorContent from '@/business/client/hooks/useBusinessErrorContent';
+import useRenderBusinessChatErrorMessageExtra from '@/business/client/hooks/useRenderBusinessChatErrorMessageExtra';
+import ErrorContent from '@/features/Conversation/ChatItem/components/ErrorContent';
 import { useProviderName } from '@/hooks/useProviderName';
-import { AgentRuntimeErrorType, ILobeAgentRuntimeErrorType } from '@/libs/model-runtime';
-import { ChatErrorType, ErrorType } from '@/types/fetch';
-import { ChatMessage, ChatMessageError } from '@/types/message';
+import dynamic from '@/libs/next/dynamic';
 
 import ChatInvalidAPIKey from './ChatInvalidApiKey';
-import ClerkLogin from './ClerkLogin';
-import ErrorJsonViewer from './ErrorJsonViewer';
-import InvalidAccessCode from './InvalidAccessCode';
-import { ErrorActionContainer } from './style';
 
-const loading = () => <Skeleton active />;
+interface ErrorMessageData {
+  error?: ChatMessageError | null;
+  id: string;
+}
+
+const loading = () => (
+  <Block
+    align={'center'}
+    padding={16}
+    variant={'outlined'}
+    style={{
+      overflow: 'hidden',
+      position: 'relative',
+      width: '100%',
+    }}
+  >
+    <Skeleton.Button active block />
+  </Block>
+);
 
 const OllamaBizError = dynamic(() => import('./OllamaBizError'), { loading, ssr: false });
 
-const OllamaSetupGuide = dynamic(() => import('@/features/OllamaSetupGuide'), {
+const OllamaSetupGuide = dynamic(() => import('./OllamaSetupGuide'), {
   loading,
   ssr: false,
 });
@@ -32,9 +52,7 @@ const getErrorAlertConfig = (
   // OpenAIBizError / ZhipuBizError / GoogleBizError / ...
   if (typeof errorType === 'string' && (errorType.includes('Biz') || errorType.includes('Invalid')))
     return {
-      extraDefaultExpand: true,
-      extraIsolate: true,
-      type: 'warning',
+      type: 'secondary',
     };
 
   /* ↓ cloud slot ↓ */
@@ -50,16 +68,16 @@ const getErrorAlertConfig = (
     case AgentRuntimeErrorType.ExceededContextWindow:
     case AgentRuntimeErrorType.LocationNotSupportError: {
       return {
-        type: 'warning',
+        type: 'secondary',
       };
     }
 
     case AgentRuntimeErrorType.OllamaServiceUnavailable:
-    case AgentRuntimeErrorType.NoOpenAIAPIKey: {
+    case AgentRuntimeErrorType.NoOpenAIAPIKey:
+    case AgentRuntimeErrorType.ComfyUIServiceUnavailable:
+    case AgentRuntimeErrorType.InvalidComfyUIArgs: {
       return {
-        extraDefaultExpand: true,
-        extraIsolate: true,
-        type: 'warning',
+        type: 'secondary',
       };
     }
 
@@ -72,22 +90,39 @@ const getErrorAlertConfig = (
 export const useErrorContent = (error: any) => {
   const { t } = useTranslation('error');
   const providerName = useProviderName(error?.body?.provider || '');
+  const businessAlertConfig = useBusinessErrorAlertConfig(error?.type);
+  const { errorType: businessErrorType, hideMessage } = useBusinessErrorContent(error?.type);
 
   return useMemo<AlertProps | undefined>(() => {
     if (!error) return;
     const messageError = error;
 
-    const alertConfig = getErrorAlertConfig(messageError.type);
+    // Use business alert config if provided, otherwise fall back to default
+    const alertConfig = businessAlertConfig ?? getErrorAlertConfig(messageError.type);
+
+    // Use business error type if provided, otherwise use original
+    const finalErrorType = businessErrorType ?? messageError.type;
 
     return {
-      message: t(`response.${messageError.type}` as any, { provider: providerName }),
+      message: hideMessage
+        ? undefined
+        : t(`response.${finalErrorType}` as any, { provider: providerName }),
       ...alertConfig,
     };
-  }, [error]);
+  }, [businessAlertConfig, businessErrorType, error, hideMessage, providerName, t]);
 };
 
-const ErrorMessageExtra = memo<{ data: ChatMessage }>(({ data }) => {
-  const error = data.error as ChatMessageError;
+interface ErrorExtraProps {
+  data: ErrorMessageData;
+  error?: AlertProps;
+}
+
+const ErrorMessageExtra = memo<ErrorExtraProps>(({ error: alertError, data }) => {
+  const error = data.error;
+  const businessChatErrorMessageExtra = useRenderBusinessChatErrorMessageExtra(error, data.id);
+  if (ENABLE_BUSINESS_FEATURES && businessChatErrorMessageExtra)
+    return businessChatErrorMessageExtra;
+
   if (!error?.type) return;
 
   switch (error.type) {
@@ -103,14 +138,6 @@ const ErrorMessageExtra = memo<{ data: ChatMessage }>(({ data }) => {
 
     /* ↑ cloud slot ↑ */
 
-    case ChatErrorType.InvalidClerkUser: {
-      return <ClerkLogin id={data.id} />;
-    }
-
-    case ChatErrorType.InvalidAccessCode: {
-      return <InvalidAccessCode id={data.id} provider={data.error?.body?.provider} />;
-    }
-
     case AgentRuntimeErrorType.NoOpenAIAPIKey: {
       {
         return <ChatInvalidAPIKey id={data.id} provider={data.error?.body?.provider} />;
@@ -122,17 +149,24 @@ const ErrorMessageExtra = memo<{ data: ChatMessage }>(({ data }) => {
     return <ChatInvalidAPIKey id={data.id} provider={data.error?.body?.provider} />;
   }
 
-  return <ErrorJsonViewer error={data.error} id={data.id} />;
+  return (
+    <ErrorContent
+      id={data.id}
+      error={{
+        ...alertError,
+        extra: data.error?.body ? (
+          <Highlighter
+            actionIconSize={'small'}
+            language={'json'}
+            padding={8}
+            variant={'borderless'}
+          >
+            {JSON.stringify(data.error?.body, null, 2)}
+          </Highlighter>
+        ) : undefined,
+      }}
+    />
+  );
 });
 
-export default memo<{ data: ChatMessage }>(({ data }) => (
-  <Suspense
-    fallback={
-      <ErrorActionContainer>
-        <Skeleton active style={{ width: '100%' }} />
-      </ErrorActionContainer>
-    }
-  >
-    <ErrorMessageExtra data={data} />
-  </Suspense>
-));
+export default ErrorMessageExtra;

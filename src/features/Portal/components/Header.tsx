@@ -1,28 +1,48 @@
 'use client';
 
-import { ActionIcon } from '@lobehub/ui';
-import { XIcon } from 'lucide-react';
-import { ReactNode, memo } from 'react';
+import { DESKTOP_HEADER_ICON_SIZE } from '@lobechat/const';
+import { ActionIcon, Flexbox } from '@lobehub/ui';
+import { ArrowLeft, PanelRightCloseIcon } from 'lucide-react';
+import { type ReactNode } from 'react';
+import { memo } from 'react';
 
-import SidebarHeader from '@/components/SidebarHeader';
+import NavHeader from '@/features/NavHeader';
 import { useChatStore } from '@/store/chat';
+import { chatPortalSelectors } from '@/store/chat/selectors';
 
 const Header = memo<{ title: ReactNode }>(({ title }) => {
-  const [toggleInspector] = useChatStore((s) => [s.togglePortal]);
+  const [canGoBack, goBack, clearPortalStack] = useChatStore((s) => [
+    chatPortalSelectors.canGoBack(s),
+    s.goBack,
+    s.clearPortalStack,
+  ]);
 
   return (
-    <SidebarHeader
-      actions={
+    <NavHeader
+      showTogglePanelButton={false}
+      style={{ paddingBlock: 8, paddingInline: 8 }}
+      left={
+        <Flexbox horizontal align="center" gap={4}>
+          {canGoBack && (
+            <ActionIcon icon={ArrowLeft} size={DESKTOP_HEADER_ICON_SIZE} onClick={goBack} />
+          )}
+          {title}
+        </Flexbox>
+      }
+      right={
         <ActionIcon
-          icon={XIcon}
+          icon={PanelRightCloseIcon}
+          size={DESKTOP_HEADER_ICON_SIZE}
           onClick={() => {
-            toggleInspector(false);
+            clearPortalStack();
           }}
-          size={'small'}
         />
       }
-      style={{ paddingBlock: 8, paddingInline: 8 }}
-      title={title}
+      styles={{
+        left: {
+          marginLeft: canGoBack ? 0 : 6,
+        },
+      }}
     />
   );
 });

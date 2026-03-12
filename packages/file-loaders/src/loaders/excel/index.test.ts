@@ -1,4 +1,5 @@
 import path from 'node:path';
+
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import type { FileLoaderInterface } from '../../types';
@@ -43,5 +44,13 @@ describe('ExcelLoader', () => {
     expect(pages).toHaveLength(1); // 即使失败也返回一个包含错误信息的页面
     expect(pages[0].pageContent).toBe('');
     expect(pages[0].metadata.error).toContain('Failed to load Excel file');
+  });
+
+  it('should handle Excel file with only headers', async () => {
+    const onlyHeaderFile = fixturePath('only-header.xlsx');
+    const pages = await loader.loadPages(onlyHeaderFile);
+    expect(pages.length).toBeGreaterThan(0);
+    expect(pages[0].pageContent).toBeTruthy(); // 应该包含表头内容
+    expect(pages).toMatchSnapshot('only_header_pages');
   });
 });

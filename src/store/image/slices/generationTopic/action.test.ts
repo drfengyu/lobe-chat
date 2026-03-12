@@ -1,14 +1,21 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import React from 'react';
-import { mutate } from 'swr';
-import { Mock, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { LOADING_FLAT } from '@/const/message';
+import { mutate } from '@/libs/swr';
 import { chatService } from '@/services/chat';
 import { generationTopicService } from '@/services/generationTopic';
 import { useImageStore } from '@/store/image';
-import { useUserStore } from '@/store/user';
-import { ImageGenerationTopic } from '@/types/generation';
+import { type ImageGenerationTopic } from '@/types/generation';
+
+// Mock @/libs/swr mutate
+vi.mock('@/libs/swr', async () => {
+  const actual = await vi.importActual('@/libs/swr');
+  return {
+    ...actual,
+    mutate: vi.fn(),
+  };
+});
 
 // Mock services and dependencies
 vi.mock('@/services/generationTopic', () => ({
@@ -39,6 +46,9 @@ vi.mock('@/store/user/selectors', () => ({
       model: 'gpt-4',
       provider: 'openai',
     }),
+  },
+  userGeneralSettingsSelectors: {
+    responseLanguage: vi.fn(() => undefined),
   },
 }));
 
@@ -245,9 +255,9 @@ describe('GenerationTopicAction', () => {
       });
 
       expect(chatService.fetchPresetTaskResult).toHaveBeenCalled();
-      // Should call with fallback title (first 3 words, max 10 chars)
+      // Should call with fallback title (first 3 words, max 20 chars)
       expect(generationTopicService.updateTopic).toHaveBeenCalledWith(topicId, {
-        title: 'A beautifu',
+        title: 'A beautiful sunset',
       });
     });
 
@@ -405,7 +415,7 @@ describe('GenerationTopicAction', () => {
         const { result } = renderHook(() => {
           const store = useImageStore();
           // Actually call the SWR hook to trigger the service call
-          const swrResult = store.useFetchGenerationTopics(true, true);
+          const swrResult = store.useFetchGenerationTopics(true);
 
           // Simulate the SWR onSuccess callback behavior
           React.useEffect(() => {
@@ -426,7 +436,7 @@ describe('GenerationTopicAction', () => {
     });
 
     it('should not fetch when disabled', async () => {
-      const { result } = renderHook(() => useImageStore().useFetchGenerationTopics(false, true));
+      const { result } = renderHook(() => useImageStore().useFetchGenerationTopics(false));
 
       expect(result.current.data).toBeUndefined();
       expect(generationTopicService.getAllGenerationTopics).not.toHaveBeenCalled();
@@ -455,7 +465,7 @@ describe('GenerationTopicAction', () => {
         await result.current.refreshGenerationTopics();
       });
 
-      expect(mutate).toHaveBeenCalledWith(['fetchGenerationTopics', true]);
+      expect(mutate).toHaveBeenCalledWith(['fetchGenerationTopics']);
     });
   });
 

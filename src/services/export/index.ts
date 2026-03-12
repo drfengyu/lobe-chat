@@ -1,6 +1,10 @@
-import { isServerMode } from '@/const/version';
+import { lambdaClient } from '@/libs/trpc/client';
+import { type ExportDatabaseData } from '@/types/export';
 
-import { ClientService } from './client';
-import { ServerService } from './server';
+class ExportService {
+  exportData = async (): Promise<ExportDatabaseData> => {
+    return await lambdaClient.exporter.exportData.mutate();
+  };
+}
 
-export const exportService = isServerMode ? new ServerService() : new ClientService();
+export const exportService = new ExportService();

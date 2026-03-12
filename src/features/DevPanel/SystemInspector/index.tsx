@@ -1,8 +1,7 @@
 'use client';
 
-import { Tabs } from '@lobehub/ui';
+import { Flexbox, Tabs } from '@lobehub/ui';
 import { useState } from 'react';
-import { Flexbox } from 'react-layout-kit';
 
 import AiProviderRuntimeConfig from './AiProviderRuntimeConfig';
 import { AIProvider, DefaultAgentConfig, ServerConfig, SystemAgent } from './ServerConfig';
@@ -21,8 +20,8 @@ const SystemInspector = () => {
   return (
     <Flexbox gap={4} height={'100%'}>
       <Tabs
-        activeKey={activeTab}
         compact
+        activeKey={activeTab}
         items={[
           {
             key: TabKey.AiProviderRuntimeConfig,

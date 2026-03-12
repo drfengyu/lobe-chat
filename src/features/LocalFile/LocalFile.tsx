@@ -1,11 +1,14 @@
-import { createStyles } from 'antd-style';
+import { Button, Flexbox, Popover } from '@lobehub/ui';
+import { Space } from 'antd';
+import { createStaticStyles, cssVar } from 'antd-style';
+import { ExternalLink, FolderOpen } from 'lucide-react';
 import React from 'react';
-import { Flexbox } from 'react-layout-kit';
+import { useTranslation } from 'react-i18next';
 
 import FileIcon from '@/components/FileIcon';
 import { localFileService } from '@/services/electron/localFileService';
 
-const useStyles = createStyles(({ css, token }) => ({
+const styles = createStaticStyles(({ css }) => ({
   container: css`
     cursor: pointer;
 
@@ -13,11 +16,11 @@ const useStyles = createStyles(({ css, token }) => ({
     padding-inline: 4px 8px;
     border-radius: 4px;
 
-    color: ${token.colorTextSecondary};
+    color: ${cssVar.colorText};
 
     :hover {
-      color: ${token.colorText};
-      background: ${token.colorFillTertiary};
+      color: ${cssVar.colorText};
+      background: ${cssVar.colorFillTertiary};
     }
   `,
   title: css`
@@ -38,26 +41,70 @@ interface LocalFileProps {
 }
 
 export const LocalFile = ({ name, path, isDirectory = false }: LocalFileProps) => {
-  const { styles } = useStyles();
-  const handleClick = () => {
-    if (!path) return;
+  const { t } = useTranslation('components');
 
+  const handleOpenFile = () => {
+    if (!path) return;
     localFileService.openLocalFileOrFolder(path, isDirectory);
   };
 
-  return (
+  const handleOpenFolder = () => {
+    if (!path) return;
+    localFileService.openFileFolder(path);
+  };
+
+  const fileContent = (
     <Flexbox
+      horizontal
       align={'center'}
       className={styles.container}
       gap={4}
-      horizontal
-      onClick={handleClick}
       style={{ display: 'inline-flex', verticalAlign: 'middle' }}
+      onClick={isDirectory ? handleOpenFile : undefined}
     >
       <FileIcon fileName={name} isDirectory={isDirectory} size={22} variant={'raw'} />
-      <Flexbox align={'baseline'} gap={4} horizontal style={{ overflow: 'hidden', width: '100%' }}>
+      <Flexbox horizontal align={'baseline'} gap={4} style={{ overflow: 'hidden', width: '100%' }}>
         <div className={styles.title}>{name}</div>
       </Flexbox>
     </Flexbox>
+  );
+
+  // Directory: no popover, just click to open
+  if (isDirectory) {
+    return fileContent;
+  }
+
+  // File: show popover with two actions
+  const popoverContent = (
+    <Space.Compact>
+      <Button
+        icon={ExternalLink}
+        size="small"
+        title={t('LocalFile.action.open')}
+        onClick={handleOpenFile}
+      >
+        {t('LocalFile.action.open')}
+      </Button>
+      <Button
+        icon={FolderOpen}
+        size="small"
+        title={t('LocalFile.action.showInFolder')}
+        onClick={handleOpenFolder}
+      >
+        {t('LocalFile.action.showInFolder')}
+      </Button>
+    </Space.Compact>
+  );
+
+  return (
+    <Popover
+      content={popoverContent}
+      trigger="hover"
+      styles={{
+        content: { padding: 0 },
+      }}
+    >
+      {fileContent}
+    </Popover>
   );
 };

@@ -1,20 +1,21 @@
-import { BookText, Cog, DatabaseIcon, FlagIcon, GlobeLockIcon } from 'lucide-react';
+'use client';
+
+import { BookText, Cog, FlagIcon, GlobeLockIcon } from 'lucide-react';
+
+import dynamic from '@/libs/next/dynamic';
 
 import CacheViewer from './CacheViewer';
 import FeatureFlagViewer from './FeatureFlagViewer';
 import MetadataViewer from './MetadataViewer';
-import PostgresViewer from './PostgresViewer';
 import SystemInspector from './SystemInspector';
-import FloatPanel from './features/FloatPanel';
+
+const FloatPanel = dynamic(() => import('./features/FloatPanel'), {
+  ssr: false,
+});
 
 const DevPanel = () => (
   <FloatPanel
     items={[
-      {
-        children: <PostgresViewer />,
-        icon: <DatabaseIcon size={16} />,
-        key: 'Postgres Viewer',
-      },
       {
         children: <MetadataViewer />,
         icon: <BookText size={16} />,

@@ -1,8 +1,7 @@
-import type { PartialDeep } from 'type-fest';
+import { type PartialDeep } from 'type-fest';
 
 import { LOBE_URL_IMPORT_NAME } from '@/const/url';
-import { UserSettings } from '@/types/user/settings';
-import { withBasePath } from '@/utils/basePath';
+import { type UserSettings } from '@/types/user/settings';
 
 class ShareService {
   /**
@@ -11,7 +10,7 @@ class ShareService {
    * @returns The share settings URL.
    */
   public createShareSettingsUrl = (settings: PartialDeep<UserSettings>) => {
-    return withBasePath(`/?${LOBE_URL_IMPORT_NAME}=${encodeURI(JSON.stringify(settings))}`);
+    return `/?${LOBE_URL_IMPORT_NAME}=${encodeURI(JSON.stringify(settings))}`;
   };
 
   /**

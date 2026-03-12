@@ -1,6 +1,6 @@
 import { resolve } from 'node:path';
 
-import { DEFAULT_MODEL_PROVIDER_LIST } from '@/config/modelProviders';
+import { DEFAULT_MODEL_PROVIDER_LIST } from 'model-bank/modelProviders';
 
 export const root = resolve(__dirname, '../..');
 

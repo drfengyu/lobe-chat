@@ -1,6 +1,6 @@
 import { headers } from 'next/headers';
 
-import { authEnv } from '@/config/auth';
+import { authEnv } from '@/envs/auth';
 
 export type CasdoorUserEntity = {
   avatar?: string;
@@ -33,7 +33,7 @@ export const validateRequest = async (request: Request, secret?: string) => {
     }
   } catch (e) {
     if (!authEnv.CASDOOR_WEBHOOK_SECRET) {
-      throw new Error('`CASDOOR_WEBHOOK_SECRET` environment variable is missing.');
+      throw new Error('`CASDOOR_WEBHOOK_SECRET` environment variable is missing.', { cause: e });
     }
     console.error('[Casdoor]: incoming webhook failed in verification.\n', e, payloadString);
     return;

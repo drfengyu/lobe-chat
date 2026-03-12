@@ -1,21 +1,22 @@
 'use client';
 
-import { Form, Highlighter } from '@lobehub/ui';
+import { Flexbox, Form, Highlighter } from '@lobehub/ui';
 import { Switch } from 'antd';
-import { createStyles } from 'antd-style';
-import { snakeCase } from 'lodash-es';
+import { createStaticStyles } from 'antd-style';
+import { snakeCase } from 'es-toolkit/compat';
 import { ListRestartIcon } from 'lucide-react';
 import { memo, useMemo, useState } from 'react';
-import { Flexbox } from 'react-layout-kit';
 
 import { DEFAULT_FEATURE_FLAGS } from '@/config/featureFlags';
 
 import Header from '../features/Header';
 
-const useStyles = createStyles(({ css, token, prefixCls }) => ({
+const prefixCls = 'ant';
+
+const styles = createStaticStyles(({ css, cssVar }) => ({
   container: css`
     * {
-      font-family: ${token.fontFamilyCode};
+      font-family: ${cssVar.fontFamilyCode};
       font-size: 12px;
     }
     .${prefixCls}-form-item {
@@ -25,7 +26,6 @@ const useStyles = createStyles(({ css, token, prefixCls }) => ({
 }));
 
 const FeatureFlagForm = memo<{ flags: any }>(({ flags }) => {
-  const { styles } = useStyles();
   const [data, setData] = useState(flags);
   const [form] = Form.useForm();
 
@@ -44,6 +44,7 @@ const FeatureFlagForm = memo<{ flags: any }>(({ flags }) => {
   return (
     <>
       <Header
+        title={'Feature Flag Env'}
         actions={[
           {
             icon: ListRestartIcon,
@@ -54,7 +55,6 @@ const FeatureFlagForm = memo<{ flags: any }>(({ flags }) => {
             title: 'Reset',
           },
         ]}
-        title={'Feature Flag Env'}
       />
       <Flexbox
         className={styles.container}
@@ -67,6 +67,8 @@ const FeatureFlagForm = memo<{ flags: any }>(({ flags }) => {
           form={form}
           initialValues={flags}
           itemMinWidth={'max(75%,240px)'}
+          itemsType={'flat'}
+          variant={'borderless'}
           items={Object.keys(flags).map((key) => {
             return {
               children: <Switch size={'small'} />,
@@ -76,15 +78,13 @@ const FeatureFlagForm = memo<{ flags: any }>(({ flags }) => {
               valuePropName: 'checked',
             };
           })}
-          itemsType={'flat'}
           onValuesChange={(_, v) => setData(v)}
-          variant={'borderless'}
         />
       </Flexbox>
       <Highlighter
+        wrap
         language={'env'}
         style={{ flex: 'none', fontSize: 12 }}
-        wrap
       >{`FEATURE_FLAGS="${output.filter(Boolean).join(',')}"`}</Highlighter>
     </>
   );
