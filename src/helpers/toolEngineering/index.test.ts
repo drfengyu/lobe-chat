@@ -1,4 +1,4 @@
-import { type LobeChatPluginManifest } from '@lobehub/chat-plugin-sdk';
+import { type ToolManifest } from '@lobechat/types';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { createAgentToolsEngine, createToolsEngine, getEnabledTools } from './index';
@@ -30,7 +30,7 @@ vi.mock('@/store/tool', () => ({
             avatar: '🔍',
           },
           type: 'builtin',
-        } as unknown as LobeChatPluginManifest,
+        } as unknown as ToolManifest,
         type: 'builtin' as const,
       },
       {
@@ -56,7 +56,7 @@ vi.mock('@/store/tool', () => ({
             avatar: '🌐',
           },
           type: 'builtin',
-        } as unknown as LobeChatPluginManifest,
+        } as unknown as ToolManifest,
         type: 'builtin' as const,
       },
     ],
@@ -64,7 +64,7 @@ vi.mock('@/store/tool', () => ({
 }));
 
 let mockGetInstalledPluginById: (id: string) => () => any = () => () => undefined;
-let mockInstalledPluginManifestList: () => LobeChatPluginManifest[] = () => [];
+let mockInstalledPluginManifestList: () => ToolManifest[] = () => [];
 
 vi.mock('@/store/tool/selectors', () => ({
   pluginSelectors: {
@@ -83,6 +83,35 @@ vi.mock('../isCanUseFC', () => ({
   isCanUseFC: () => true,
 }));
 
+let mockCurrentAgentPlugins: string[] = [];
+
+vi.mock('@/store/agent', () => ({
+  getAgentStoreState: () => ({}),
+}));
+
+vi.mock('@/store/agent/selectors', () => ({
+  agentSelectors: {
+    currentAgentPlugins: () => mockCurrentAgentPlugins,
+    hasEnabledKnowledgeBases: () => false,
+  },
+  agentChatConfigSelectors: {
+    currentChatConfig: () => ({}),
+    isCloudSandboxEnabled: () => false,
+    isLocalSystemEnabled: () => false,
+    isMemoryToolEnabled: () => false,
+  },
+}));
+
+vi.mock('@/store/user', () => ({
+  useUserStore: { getState: () => ({}) },
+}));
+
+vi.mock('@/store/user/selectors', () => ({
+  settingsSelectors: {
+    memoryEnabled: () => false,
+  },
+}));
+
 let mockUseApplicationBuiltinSearchTool = true;
 
 vi.mock('@/helpers/getSearchConfig', () => ({
@@ -98,6 +127,7 @@ describe('toolEngineering', () => {
     mockGetInstalledPluginById = () => () => undefined;
     mockInstalledPluginManifestList = () => [];
     mockUseApplicationBuiltinSearchTool = true;
+    mockCurrentAgentPlugins = [];
   });
 
   describe('createToolsEngine', () => {
@@ -172,6 +202,8 @@ describe('toolEngineering', () => {
     });
 
     it('should include web browsing tool alongside user-provided tools', () => {
+      mockCurrentAgentPlugins = ['search'];
+
       const toolsEngine = createAgentToolsEngine({
         model: 'gpt-4',
         provider: 'openai',
@@ -238,12 +270,13 @@ describe('toolEngineering', () => {
           identifier: 'stdio-mcp-plugin',
           meta: { title: 'Stdio MCP', avatar: '🔧' },
           type: 'default',
-        } as unknown as LobeChatPluginManifest,
+        } as unknown as ToolManifest,
       ];
       mockGetInstalledPluginById = (id: string) => () =>
         id === 'stdio-mcp-plugin'
           ? { customParams: { mcp: { type: 'stdio' } }, identifier: id }
           : undefined;
+      mockCurrentAgentPlugins = ['stdio-mcp-plugin'];
 
       const toolsEngine = createAgentToolsEngine({ model: 'gpt-4', provider: 'openai' });
       const result = toolsEngine.generateToolsDetailed({
@@ -272,7 +305,7 @@ describe('toolEngineering', () => {
       identifier: 'stdio-mcp-plugin',
       meta: { title: 'Stdio MCP', avatar: '🔧' },
       type: 'default',
-    } as unknown as LobeChatPluginManifest;
+    } as unknown as ToolManifest;
 
     const httpMcpManifest = {
       api: [
@@ -285,7 +318,7 @@ describe('toolEngineering', () => {
       identifier: 'http-mcp-plugin',
       meta: { title: 'HTTP MCP', avatar: '🌐' },
       type: 'default',
-    } as unknown as LobeChatPluginManifest;
+    } as unknown as ToolManifest;
 
     it('should filter stdio MCP tools in non-desktop environment', () => {
       mockInstalledPluginManifestList = () => [stdioMcpManifest];
@@ -293,6 +326,7 @@ describe('toolEngineering', () => {
         id === 'stdio-mcp-plugin'
           ? { customParams: { mcp: { type: 'stdio' } }, identifier: id }
           : undefined;
+      mockCurrentAgentPlugins = ['stdio-mcp-plugin'];
 
       const toolsEngine = createAgentToolsEngine({ model: 'gpt-4', provider: 'openai' });
       const result = toolsEngine.generateToolsDetailed({
@@ -310,6 +344,7 @@ describe('toolEngineering', () => {
         id === 'http-mcp-plugin'
           ? { customParams: { mcp: { type: 'http' } }, identifier: id }
           : undefined;
+      mockCurrentAgentPlugins = ['http-mcp-plugin'];
 
       const toolsEngine = createAgentToolsEngine({ model: 'gpt-4', provider: 'openai' });
       const result = toolsEngine.generateToolsDetailed({

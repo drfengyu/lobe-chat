@@ -2,6 +2,9 @@ import { AssociatedObjectSchema } from '@lobechat/memory-user-memory';
 import type {
   MergeStrategyEnum,
   Optional,
+  QueryTaxonomyOptionsParams,
+  QueryTaxonomyOptionsResult,
+  SearchMemoryParams,
   TypesEnum,
   UserMemoryContextObjectType,
   UserMemoryContextSubjectType,
@@ -21,19 +24,7 @@ import {
   RelationshipEnum,
 } from '@lobechat/types';
 import type { AnyColumn, SQL } from 'drizzle-orm';
-import {
-  and,
-  asc,
-  cosineDistance,
-  desc,
-  eq,
-  ilike,
-  inArray,
-  isNotNull,
-  ne,
-  or,
-  sql,
-} from 'drizzle-orm';
+import { and, asc, cosineDistance, desc, eq, inArray, isNotNull, ne, or, sql } from 'drizzle-orm';
 
 import { merge } from '@/utils/merge';
 
@@ -55,8 +46,11 @@ import {
   userMemoriesPreferences,
 } from '../../schemas';
 import type { LobeChatDatabase } from '../../type';
+import { sanitizeBm25Query } from '../../utils/bm25';
 import { selectNonVectorColumns } from '../../utils/columns';
 import { TopicModel } from '../topic';
+import type { UserMemoryHybridSearchAggregatedResult } from './query';
+import { UserMemoryQueryModel } from './query';
 
 const normalizeRelationshipValue = (input: unknown): RelationshipEnum | null => {
   if (input === null) return null;
@@ -198,6 +192,8 @@ export interface UserMemorySearchAggregatedResult {
   experiences: UserMemoryExperienceWithoutVectors[];
   preferences: UserMemoryPreferenceWithoutVectors[];
 }
+
+const pickSingleSearchType = (types?: string[]) => (types?.length === 1 ? types[0] : undefined);
 
 export interface UpdateUserMemoryVectorsParams {
   detailsVector1024?: number[] | null;
@@ -497,10 +493,12 @@ export class UserMemoryModel {
   private userId: string;
   private db: LobeChatDatabase;
   private topicModel: TopicModel;
+  private queryModel: UserMemoryQueryModel;
 
   constructor(db: LobeChatDatabase, userId: string) {
     this.userId = userId;
     this.db = db;
+    this.queryModel = new UserMemoryQueryModel(db, userId);
     this.topicModel = new TopicModel(db, userId);
   }
 
@@ -867,7 +865,19 @@ export class UserMemoryModel {
     };
   };
 
-  // TODO(@nekomeowww): should use L & R generic for helping to determine what result type to return
+  searchMemory = async (
+    params: SearchMemoryParams,
+    queryEmbeddings: number[][] = [],
+  ): Promise<UserMemoryHybridSearchAggregatedResult> => {
+    return this.queryModel.searchMemory(params, queryEmbeddings);
+  };
+
+  queryTaxonomyOptions = async (
+    params: QueryTaxonomyOptionsParams = {},
+  ): Promise<QueryTaxonomyOptionsResult> => {
+    return this.queryModel.queryTaxonomyOptions(params);
+  };
+
   queryMemories = async (params: QueryUserMemoriesParams = {}): Promise<GetMemoriesResult> => {
     const {
       categories,
@@ -890,6 +900,7 @@ export class UserMemoryModel {
 
     const normalizedQuery = typeof q === 'string' ? q.trim() : '';
     const resolvedLayer = layer ?? LayersEnum.Context;
+    const bm25Query = normalizedQuery ? sanitizeBm25Query(normalizedQuery) : '';
 
     const conditions: Array<SQL | undefined> = [
       eq(userMemories.userId, this.userId),
@@ -897,13 +908,6 @@ export class UserMemoryModel {
         ? inArray(userMemories.memoryCategory, categories)
         : undefined,
       eq(userMemories.memoryLayer, resolvedLayer),
-      normalizedQuery
-        ? or(
-            ilike(userMemories.title, `%${normalizedQuery}%`),
-            ilike(userMemories.summary, `%${normalizedQuery}%`),
-            ilike(userMemories.details, `%${normalizedQuery}%`),
-          )
-        : undefined,
     ];
 
     const filters = conditions.filter((condition): condition is SQL => condition !== undefined);
@@ -963,6 +967,9 @@ export class UserMemoryModel {
 
         const contextFilters: Array<SQL | undefined> = [
           whereClause,
+          normalizedQuery
+            ? sql`(${userMemories.title} @@@ ${bm25Query} OR ${userMemories.summary} @@@ ${bm25Query} OR ${userMemories.details} @@@ ${bm25Query} OR ${userMemoriesContexts.title} @@@ ${bm25Query} OR ${userMemoriesContexts.description} @@@ ${bm25Query} OR ${userMemoriesContexts.currentStatus} @@@ ${bm25Query})`
+            : undefined,
           types && types.length > 0 ? inArray(userMemoriesContexts.type, types) : undefined,
           tags && tags.length > 0
             ? or(
@@ -986,39 +993,39 @@ export class UserMemoryModel {
             )
           : undefined;
 
-        const [rows, totalResult] = await Promise.all([
-          this.db
-            .select({
-              context: {
-                accessedAt: userMemoriesContexts.accessedAt,
-                createdAt: userMemoriesContexts.createdAt,
-                currentStatus: userMemoriesContexts.currentStatus,
-                description: userMemoriesContexts.description,
-                id: userMemoriesContexts.id,
-                metadata: userMemoriesContexts.metadata,
-                scoreImpact: userMemoriesContexts.scoreImpact,
-                scoreUrgency: userMemoriesContexts.scoreUrgency,
-                tags: userMemoriesContexts.tags,
-                title: userMemoriesContexts.title,
-                type: userMemoriesContexts.type,
-                updatedAt: userMemoriesContexts.updatedAt,
-                userId: userMemoriesContexts.userId,
-                userMemoryIds: userMemoriesContexts.userMemoryIds,
-              },
-              memory: baseSelection,
-            })
-            .from(userMemories)
-            .innerJoin(userMemoriesContexts, joinCondition)
-            .where(contextWhereClause)
-            .orderBy(...orderByClauses)
-            .limit(normalizedPageSize)
-            .offset(offset),
-          this.db
-            .select({ count: sql<number>`COUNT(DISTINCT ${userMemories.id})::int` })
-            .from(userMemories)
-            .innerJoin(userMemoriesContexts, joinCondition)
-            .where(contextWhereClause),
-        ]);
+        const rowsQuery = this.db
+          .select({
+            context: {
+              accessedAt: userMemoriesContexts.accessedAt,
+              createdAt: userMemoriesContexts.createdAt,
+              currentStatus: userMemoriesContexts.currentStatus,
+              description: userMemoriesContexts.description,
+              id: userMemoriesContexts.id,
+              metadata: userMemoriesContexts.metadata,
+              scoreImpact: userMemoriesContexts.scoreImpact,
+              scoreUrgency: userMemoriesContexts.scoreUrgency,
+              tags: userMemoriesContexts.tags,
+              title: userMemoriesContexts.title,
+              type: userMemoriesContexts.type,
+              updatedAt: userMemoriesContexts.updatedAt,
+              userId: userMemoriesContexts.userId,
+              userMemoryIds: userMemoriesContexts.userMemoryIds,
+            },
+            memory: baseSelection,
+          })
+          .from(userMemories)
+          .innerJoin(userMemoriesContexts, joinCondition)
+          .where(contextWhereClause)
+          .orderBy(...orderByClauses)
+          .limit(normalizedPageSize)
+          .offset(offset);
+        const totalQuery = this.db
+          .select({ count: sql<number>`COUNT(DISTINCT ${userMemories.id})::int` })
+          .from(userMemories)
+          .innerJoin(userMemoriesContexts, joinCondition)
+          .where(contextWhereClause);
+
+        const [rows, totalResult] = await Promise.all([rowsQuery, totalQuery]);
 
         return {
           items: rows.map((row) => {
@@ -1049,6 +1056,9 @@ export class UserMemoryModel {
 
         const activityFilters: Array<SQL | undefined> = [
           whereClause,
+          normalizedQuery
+            ? sql`(${userMemories.title} @@@ ${bm25Query} OR ${userMemories.summary} @@@ ${bm25Query} OR ${userMemories.details} @@@ ${bm25Query} OR ${userMemoriesActivities.narrative} @@@ ${bm25Query} OR ${userMemoriesActivities.notes} @@@ ${bm25Query} OR ${userMemoriesActivities.feedback} @@@ ${bm25Query})`
+            : undefined,
           types && types.length > 0 ? inArray(userMemoriesActivities.type, types) : undefined,
           status && status.length > 0 ? inArray(userMemoriesActivities.status, status) : undefined,
           tags && tags.length > 0
@@ -1073,44 +1083,44 @@ export class UserMemoryModel {
             )
           : undefined;
 
-        const [rows, totalResult] = await Promise.all([
-          this.db
-            .select({
-              activity: {
-                accessedAt: userMemoriesActivities.accessedAt,
-                associatedLocations: userMemoriesActivities.associatedLocations,
-                associatedObjects: userMemoriesActivities.associatedObjects,
-                associatedSubjects: userMemoriesActivities.associatedSubjects,
-                capturedAt: userMemoriesActivities.capturedAt,
-                createdAt: userMemoriesActivities.createdAt,
-                endsAt: userMemoriesActivities.endsAt,
-                feedback: userMemoriesActivities.feedback,
-                id: userMemoriesActivities.id,
-                metadata: userMemoriesActivities.metadata,
-                narrative: userMemoriesActivities.narrative,
-                startsAt: userMemoriesActivities.startsAt,
-                status: userMemoriesActivities.status,
-                tags: userMemoriesActivities.tags,
-                timezone: userMemoriesActivities.timezone,
-                type: userMemoriesActivities.type,
-                updatedAt: userMemoriesActivities.updatedAt,
-                userId: userMemoriesActivities.userId,
-                userMemoryId: userMemoriesActivities.userMemoryId,
-              },
-              memory: baseSelection,
-            })
-            .from(userMemories)
-            .innerJoin(userMemoriesActivities, joinCondition)
-            .where(activityWhereClause)
-            .orderBy(...orderByClauses)
-            .limit(normalizedPageSize)
-            .offset(offset),
-          this.db
-            .select({ count: sql<number>`COUNT(*)::int` })
-            .from(userMemories)
-            .innerJoin(userMemoriesActivities, joinCondition)
-            .where(activityWhereClause),
-        ]);
+        const rowsQuery = this.db
+          .select({
+            activity: {
+              accessedAt: userMemoriesActivities.accessedAt,
+              associatedLocations: userMemoriesActivities.associatedLocations,
+              associatedObjects: userMemoriesActivities.associatedObjects,
+              associatedSubjects: userMemoriesActivities.associatedSubjects,
+              capturedAt: userMemoriesActivities.capturedAt,
+              createdAt: userMemoriesActivities.createdAt,
+              endsAt: userMemoriesActivities.endsAt,
+              feedback: userMemoriesActivities.feedback,
+              id: userMemoriesActivities.id,
+              metadata: userMemoriesActivities.metadata,
+              narrative: userMemoriesActivities.narrative,
+              startsAt: userMemoriesActivities.startsAt,
+              status: userMemoriesActivities.status,
+              tags: userMemoriesActivities.tags,
+              timezone: userMemoriesActivities.timezone,
+              type: userMemoriesActivities.type,
+              updatedAt: userMemoriesActivities.updatedAt,
+              userId: userMemoriesActivities.userId,
+              userMemoryId: userMemoriesActivities.userMemoryId,
+            },
+            memory: baseSelection,
+          })
+          .from(userMemories)
+          .innerJoin(userMemoriesActivities, joinCondition)
+          .where(activityWhereClause)
+          .orderBy(...orderByClauses)
+          .limit(normalizedPageSize)
+          .offset(offset);
+        const totalQuery = this.db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(userMemories)
+          .innerJoin(userMemoriesActivities, joinCondition)
+          .where(activityWhereClause);
+
+        const [rows, totalResult] = await Promise.all([rowsQuery, totalQuery]);
 
         return {
           items: rows.map((row) => {
@@ -1143,6 +1153,9 @@ export class UserMemoryModel {
 
         const experienceFilters: Array<SQL | undefined> = [
           whereClause,
+          normalizedQuery
+            ? sql`(${userMemories.title} @@@ ${bm25Query} OR ${userMemories.summary} @@@ ${bm25Query} OR ${userMemories.details} @@@ ${bm25Query} OR ${userMemoriesExperiences.situation} @@@ ${bm25Query} OR ${userMemoriesExperiences.keyLearning} @@@ ${bm25Query} OR ${userMemoriesExperiences.action} @@@ ${bm25Query})`
+            : undefined,
           types && types.length > 0 ? inArray(userMemoriesExperiences.type, types) : undefined,
           tags && tags.length > 0
             ? or(...tags.map((tag) => sql<boolean>`${tag} = ANY(${userMemoriesExperiences.tags})`))
@@ -1158,38 +1171,38 @@ export class UserMemoryModel {
             )
           : undefined;
 
-        const [rows, totalResult] = await Promise.all([
-          this.db
-            .select({
-              experience: {
-                accessedAt: userMemoriesExperiences.accessedAt,
-                action: userMemoriesExperiences.action,
-                createdAt: userMemoriesExperiences.createdAt,
-                id: userMemoriesExperiences.id,
-                keyLearning: userMemoriesExperiences.keyLearning,
-                metadata: userMemoriesExperiences.metadata,
-                scoreConfidence: userMemoriesExperiences.scoreConfidence,
-                situation: userMemoriesExperiences.situation,
-                tags: userMemoriesExperiences.tags,
-                type: userMemoriesExperiences.type,
-                updatedAt: userMemoriesExperiences.updatedAt,
-                userId: userMemoriesExperiences.userId,
-                userMemoryId: userMemoriesExperiences.userMemoryId,
-              },
-              memory: baseSelection,
-            })
-            .from(userMemories)
-            .innerJoin(userMemoriesExperiences, joinCondition)
-            .where(experienceWhereClause)
-            .orderBy(...orderByClauses)
-            .limit(normalizedPageSize)
-            .offset(offset),
-          this.db
-            .select({ count: sql<number>`COUNT(*)::int` })
-            .from(userMemories)
-            .innerJoin(userMemoriesExperiences, joinCondition)
-            .where(experienceWhereClause),
-        ]);
+        const rowsQuery = this.db
+          .select({
+            experience: {
+              accessedAt: userMemoriesExperiences.accessedAt,
+              action: userMemoriesExperiences.action,
+              createdAt: userMemoriesExperiences.createdAt,
+              id: userMemoriesExperiences.id,
+              keyLearning: userMemoriesExperiences.keyLearning,
+              metadata: userMemoriesExperiences.metadata,
+              scoreConfidence: userMemoriesExperiences.scoreConfidence,
+              situation: userMemoriesExperiences.situation,
+              tags: userMemoriesExperiences.tags,
+              type: userMemoriesExperiences.type,
+              updatedAt: userMemoriesExperiences.updatedAt,
+              userId: userMemoriesExperiences.userId,
+              userMemoryId: userMemoriesExperiences.userMemoryId,
+            },
+            memory: baseSelection,
+          })
+          .from(userMemories)
+          .innerJoin(userMemoriesExperiences, joinCondition)
+          .where(experienceWhereClause)
+          .orderBy(...orderByClauses)
+          .limit(normalizedPageSize)
+          .offset(offset);
+        const totalQuery = this.db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(userMemories)
+          .innerJoin(userMemoriesExperiences, joinCondition)
+          .where(experienceWhereClause);
+
+        const [rows, totalResult] = await Promise.all([rowsQuery, totalQuery]);
 
         return {
           items: rows.map((row) => {
@@ -1217,6 +1230,9 @@ export class UserMemoryModel {
 
         const identityFilters: Array<SQL | undefined> = [
           whereClause,
+          normalizedQuery
+            ? sql`(${userMemories.title} @@@ ${bm25Query} OR ${userMemories.summary} @@@ ${bm25Query} OR ${userMemories.details} @@@ ${bm25Query} OR ${userMemoriesIdentities.description} @@@ ${bm25Query} OR ${userMemoriesIdentities.role} @@@ ${bm25Query})`
+            : undefined,
           types && types.length > 0 ? inArray(userMemoriesIdentities.type, types) : undefined,
           tags && tags.length > 0
             ? or(...tags.map((tag) => sql<boolean>`${tag} = ANY(${userMemoriesIdentities.tags})`))
@@ -1232,40 +1248,40 @@ export class UserMemoryModel {
             )
           : undefined;
 
-        const [rows, totalResult] = await Promise.all([
-          this.db
-            .select({
-              identity: {
-                accessedAt: userMemoriesIdentities.accessedAt,
-                capturedAt: userMemoriesIdentities.capturedAt,
-                createdAt: userMemoriesIdentities.createdAt,
-                description: userMemoriesIdentities.description,
-                episodicDate: userMemoriesIdentities.episodicDate,
-                id: userMemoriesIdentities.id,
-                metadata: userMemoriesIdentities.metadata,
-                relationship: userMemoriesIdentities.relationship,
-                role: userMemoriesIdentities.role,
-                tags: userMemoriesIdentities.tags,
-                title: userMemories.title,
-                type: userMemoriesIdentities.type,
-                updatedAt: userMemoriesIdentities.updatedAt,
-                userId: userMemoriesIdentities.userId,
-                userMemoryId: userMemoriesIdentities.userMemoryId,
-              },
-              memory: baseSelection,
-            })
-            .from(userMemories)
-            .innerJoin(userMemoriesIdentities, joinCondition)
-            .where(identityWhereClause)
-            .orderBy(...orderByClauses)
-            .limit(normalizedPageSize)
-            .offset(offset),
-          this.db
-            .select({ count: sql<number>`COUNT(*)::int` })
-            .from(userMemories)
-            .innerJoin(userMemoriesIdentities, joinCondition)
-            .where(identityWhereClause),
-        ]);
+        const rowsQuery = this.db
+          .select({
+            identity: {
+              accessedAt: userMemoriesIdentities.accessedAt,
+              capturedAt: userMemoriesIdentities.capturedAt,
+              createdAt: userMemoriesIdentities.createdAt,
+              description: userMemoriesIdentities.description,
+              episodicDate: userMemoriesIdentities.episodicDate,
+              id: userMemoriesIdentities.id,
+              metadata: userMemoriesIdentities.metadata,
+              relationship: userMemoriesIdentities.relationship,
+              role: userMemoriesIdentities.role,
+              tags: userMemoriesIdentities.tags,
+              title: userMemories.title,
+              type: userMemoriesIdentities.type,
+              updatedAt: userMemoriesIdentities.updatedAt,
+              userId: userMemoriesIdentities.userId,
+              userMemoryId: userMemoriesIdentities.userMemoryId,
+            },
+            memory: baseSelection,
+          })
+          .from(userMemories)
+          .innerJoin(userMemoriesIdentities, joinCondition)
+          .where(identityWhereClause)
+          .orderBy(...orderByClauses)
+          .limit(normalizedPageSize)
+          .offset(offset);
+        const totalQuery = this.db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(userMemories)
+          .innerJoin(userMemoriesIdentities, joinCondition)
+          .where(identityWhereClause);
+
+        const [rows, totalResult] = await Promise.all([rowsQuery, totalQuery]);
 
         return {
           items: rows.map((row) => {
@@ -1298,6 +1314,9 @@ export class UserMemoryModel {
 
         const preferenceFilters: Array<SQL | undefined> = [
           whereClause,
+          normalizedQuery
+            ? sql`(${userMemories.title} @@@ ${bm25Query} OR ${userMemories.summary} @@@ ${bm25Query} OR ${userMemories.details} @@@ ${bm25Query} OR ${userMemoriesPreferences.conclusionDirectives} @@@ ${bm25Query} OR ${userMemoriesPreferences.suggestions} @@@ ${bm25Query})`
+            : undefined,
           types && types.length > 0 ? inArray(userMemoriesPreferences.type, types) : undefined,
           tags && tags.length > 0
             ? or(...tags.map((tag) => sql<boolean>`${tag} = ANY(${userMemoriesPreferences.tags})`))
@@ -1313,36 +1332,36 @@ export class UserMemoryModel {
             )
           : undefined;
 
-        const [rows, totalResult] = await Promise.all([
-          this.db
-            .select({
-              memory: baseSelection,
-              preference: {
-                accessedAt: userMemoriesPreferences.accessedAt,
-                conclusionDirectives: userMemoriesPreferences.conclusionDirectives,
-                createdAt: userMemoriesPreferences.createdAt,
-                id: userMemoriesPreferences.id,
-                metadata: userMemoriesPreferences.metadata,
-                scorePriority: userMemoriesPreferences.scorePriority,
-                tags: userMemoriesPreferences.tags,
-                type: userMemoriesPreferences.type,
-                updatedAt: userMemoriesPreferences.updatedAt,
-                userId: userMemoriesPreferences.userId,
-                userMemoryId: userMemoriesPreferences.userMemoryId,
-              },
-            })
-            .from(userMemories)
-            .innerJoin(userMemoriesPreferences, joinCondition)
-            .where(preferenceWhereClause)
-            .orderBy(...orderByClauses)
-            .limit(normalizedPageSize)
-            .offset(offset),
-          this.db
-            .select({ count: sql<number>`COUNT(*)::int` })
-            .from(userMemories)
-            .innerJoin(userMemoriesPreferences, joinCondition)
-            .where(preferenceWhereClause),
-        ]);
+        const rowsQuery = this.db
+          .select({
+            memory: baseSelection,
+            preference: {
+              accessedAt: userMemoriesPreferences.accessedAt,
+              conclusionDirectives: userMemoriesPreferences.conclusionDirectives,
+              createdAt: userMemoriesPreferences.createdAt,
+              id: userMemoriesPreferences.id,
+              metadata: userMemoriesPreferences.metadata,
+              scorePriority: userMemoriesPreferences.scorePriority,
+              tags: userMemoriesPreferences.tags,
+              type: userMemoriesPreferences.type,
+              updatedAt: userMemoriesPreferences.updatedAt,
+              userId: userMemoriesPreferences.userId,
+              userMemoryId: userMemoriesPreferences.userMemoryId,
+            },
+          })
+          .from(userMemories)
+          .innerJoin(userMemoriesPreferences, joinCondition)
+          .where(preferenceWhereClause)
+          .orderBy(...orderByClauses)
+          .limit(normalizedPageSize)
+          .offset(offset);
+        const totalQuery = this.db
+          .select({ count: sql<number>`COUNT(*)::int` })
+          .from(userMemories)
+          .innerJoin(userMemoriesPreferences, joinCondition)
+          .where(preferenceWhereClause);
+
+        const [rows, totalResult] = await Promise.all([rowsQuery, totalQuery]);
 
         return {
           items: rows.map((row) => {
@@ -2355,7 +2374,6 @@ export class UserMemoryModel {
     } else {
       query = query.orderBy(desc(userMemoriesActivities.createdAt));
     }
-
     return query.limit(limit) as Promise<UserMemoryActivitiesWithoutVectors[]>;
   };
 
@@ -2407,7 +2425,6 @@ export class UserMemoryModel {
     } else {
       query = query.orderBy(desc(userMemoriesContexts.createdAt));
     }
-
     const res = (await query.limit(limit)) as UserMemoryContextWithoutVectors[];
     return res;
   };
@@ -2459,7 +2476,6 @@ export class UserMemoryModel {
     } else {
       query = query.orderBy(desc(userMemoriesExperiences.createdAt));
     }
-
     return query.limit(limit);
   };
 
@@ -2507,7 +2523,6 @@ export class UserMemoryModel {
     } else {
       query = query.orderBy(desc(userMemoriesPreferences.createdAt));
     }
-
     return query.limit(limit);
   };
 

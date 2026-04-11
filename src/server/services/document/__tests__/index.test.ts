@@ -42,6 +42,7 @@ describe('DocumentService', () => {
     mockDocumentModel = {
       create: vi.fn(),
       delete: vi.fn(),
+      findByFileId: vi.fn().mockResolvedValue(null),
       findById: vi.fn(),
       query: vi.fn(),
       update: vi.fn(),
@@ -67,6 +68,12 @@ describe('DocumentService', () => {
 
   afterEach(() => {
     vi.clearAllMocks();
+  });
+
+  describe('constructor', () => {
+    it('should not initialize FileService before file parsing is needed', () => {
+      expect(FileService).not.toHaveBeenCalled();
+    });
   });
 
   describe('createDocument', () => {

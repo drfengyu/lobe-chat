@@ -42,21 +42,22 @@ export class BackendProxyProtocolManager {
   private static readonly AUTH_REQUIRED_DEBOUNCE_MS = 1000;
 
   private notifyAuthorizationRequired() {
-    // Debounce: skip if a notification is already scheduled
+    // Trailing-edge debounce: coalesce rapid 401 bursts and fire AFTER the burst settles.
+    // This ensures the IPC event is sent after the renderer has had time to mount listeners.
     if (this.authRequiredDebounceTimer) {
-      return;
+      clearTimeout(this.authRequiredDebounceTimer);
     }
 
     this.authRequiredDebounceTimer = setTimeout(() => {
       this.authRequiredDebounceTimer = null;
-    }, BackendProxyProtocolManager.AUTH_REQUIRED_DEBOUNCE_MS);
 
-    const allWindows = BrowserWindow.getAllWindows();
-    for (const win of allWindows) {
-      if (!win.isDestroyed()) {
-        win.webContents.send('authorizationRequired');
+      const allWindows = BrowserWindow.getAllWindows();
+      for (const win of allWindows) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('authorizationRequired');
+        }
       }
-    }
+    }, BackendProxyProtocolManager.AUTH_REQUIRED_DEBOUNCE_MS);
   }
 
   registerWithRemoteBaseUrl(
@@ -159,14 +160,13 @@ export class BackendProxyProtocolManager {
         responseHeaders.set('Access-Control-Allow-Headers', '*');
         responseHeaders.set('X-Src-Url', rewrittenUrl);
 
-        // Handle 401 Unauthorized: only notify authorization required for real auth failures
-        // The server sets X-Auth-Required header for real authentication failures (e.g., token expired)
-        // Other 401 errors (e.g., invalid API keys) should not trigger re-authentication
-        if (upstreamResponse.status === 401) {
-          const authRequired = upstreamResponse.headers.get(AUTH_REQUIRED_HEADER) === 'true';
-          if (authRequired) {
-            this.notifyAuthorizationRequired();
-          }
+        // Re-auth prompt: rely on X-Auth-Required (set by tRPC responseMeta for UNAUTHORIZED).
+        // Batched tRPC responses can use HTTP 207 when calls mix success (200) and UNAUTHORIZED (401);
+        // checking only status === 401 misses that case and the login modal never opens.
+        // Other failures keep 401 without this header (e.g., invalid API keys) and must not notify here.
+        const authRequired = upstreamResponse.headers.get(AUTH_REQUIRED_HEADER) === 'true';
+        if (authRequired) {
+          this.notifyAuthorizationRequired();
         }
 
         return new Response(upstreamResponse.body, {

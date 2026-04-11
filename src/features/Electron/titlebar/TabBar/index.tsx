@@ -6,7 +6,6 @@ import { useNavigate } from 'react-router-dom';
 
 import { pluginRegistry } from '@/features/Electron/titlebar/RecentlyViewed/plugins';
 import { useElectronStore } from '@/store/electron';
-import { electronStylish } from '@/styles/electron';
 
 import { useResolvedTabs } from './hooks/useResolvedTabs';
 import { useStyles } from './styles';
@@ -28,11 +27,11 @@ const TabBar = () => {
 
   const handleActivate = useCallback(
     (id: string, url: string) => {
-      // 优先更新 Tab 激活状态（高优先级）
+      // Prioritize updating the Tab activation state (high priority)
       activateTab(id);
       const tab = tabs.find((t) => t.reference.id === id);
       if (tab) pluginRegistry.onActivate(tab.reference);
-      // 路由跳转降级为 startTransition（低优先级）
+      // Degrade route navigation to startTransition (low priority)
       startTransition(() => navigate(url));
     },
     [activateTab, navigate, tabs],
@@ -121,7 +120,7 @@ const TabBar = () => {
 
   return (
     <ScrollArea
-      className={`${electronStylish.nodrag} ${styles.container}`}
+      className={styles.container}
       viewportProps={{ ref: viewportRef }}
       contentProps={{
         style: { alignItems: 'center', flexDirection: 'row', gap: TAB_GAP },

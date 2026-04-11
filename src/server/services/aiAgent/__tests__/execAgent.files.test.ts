@@ -3,11 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AiAgentService } from '../index';
 
-const { mockMessageCreate, mockCreateOperation, mockUploadFromUrl } = vi.hoisted(() => ({
-  mockCreateOperation: vi.fn(),
-  mockMessageCreate: vi.fn(),
-  mockUploadFromUrl: vi.fn(),
-}));
+const { mockMessageCreate, mockCreateOperation, mockIngestAttachment, mockParseFile } = vi.hoisted(
+  () => ({
+    mockCreateOperation: vi.fn(),
+    mockIngestAttachment: vi.fn(),
+    mockMessageCreate: vi.fn(),
+    mockParseFile: vi.fn(),
+  }),
+);
 
 vi.mock('@/libs/trusted-client', () => ({
   generateTrustedClientToken: vi.fn().mockReturnValue(undefined),
@@ -35,6 +38,7 @@ vi.mock('@/database/models/agent', () => ({
       provider: 'openai',
       systemRole: 'You are a helpful assistant',
     }),
+    queryAgents: vi.fn().mockResolvedValue([]),
   })),
 }));
 
@@ -93,7 +97,19 @@ vi.mock('@/server/services/klavis', () => ({
 
 vi.mock('@/server/services/file', () => ({
   FileService: vi.fn().mockImplementation(() => ({
-    uploadFromUrl: mockUploadFromUrl,
+    getFullFileUrl: vi
+      .fn()
+      .mockImplementation((key: string) => Promise.resolve(`https://s3.example.com/${key}`)),
+  })),
+}));
+
+vi.mock('../ingestAttachment', () => ({
+  ingestAttachment: mockIngestAttachment,
+}));
+
+vi.mock('@/server/services/document', () => ({
+  DocumentService: vi.fn().mockImplementation(() => ({
+    parseFile: mockParseFile,
   })),
 }));
 
@@ -103,6 +119,13 @@ vi.mock('@/server/modules/Mecha', () => ({
     getEnabledPluginManifests: vi.fn().mockReturnValue(new Map()),
   }),
   serverMessagesEngine: vi.fn().mockResolvedValue([{ content: 'test', role: 'user' }]),
+}));
+
+vi.mock('@/server/services/toolExecution/deviceProxy', () => ({
+  deviceProxy: {
+    isConfigured: false,
+    queryDeviceList: vi.fn().mockResolvedValue([]),
+  },
 }));
 
 vi.mock('model-bank', async (importOriginal) => {
@@ -133,6 +156,7 @@ describe('AiAgentService.execAgent - file upload handling', () => {
       operationId: 'op-123',
       success: true,
     });
+    mockParseFile.mockResolvedValue({ content: '' });
 
     service = new AiAgentService(mockDb, userId);
   });
@@ -143,10 +167,12 @@ describe('AiAgentService.execAgent - file upload handling', () => {
 
   describe('when files are provided', () => {
     it('should upload files to S3 and pass fileIds to messageModel.create', async () => {
-      mockUploadFromUrl.mockResolvedValue({
+      mockIngestAttachment.mockResolvedValue({
         fileId: 'file-abc',
+        isImage: true,
+        isVideo: false,
         key: 'files/test-user-id/xxx/photo.png',
-        url: 'https://app.lobehub.com/f/file-abc',
+        resolvedUrl: 'https://s3.example.com/files/test-user-id/xxx/photo.png',
       });
 
       await service.execAgent({
@@ -162,10 +188,11 @@ describe('AiAgentService.execAgent - file upload handling', () => {
         prompt: 'What is in this image?',
       });
 
-      // Verify uploadFromUrl was called with the external URL
-      expect(mockUploadFromUrl).toHaveBeenCalledWith(
-        'https://cdn.discordapp.com/attachments/123/456/photo.png',
-        expect.stringContaining('photo.png'),
+      // Verify ingestAttachment was called
+      expect(mockIngestAttachment).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'photo.png', mimeType: 'image/png' }),
+        expect.any(Object),
+        'test-user-id',
       );
 
       // Verify messageModel.create was called with files
@@ -174,10 +201,12 @@ describe('AiAgentService.execAgent - file upload handling', () => {
     });
 
     it('should include imageList in initialMessages for vision models', async () => {
-      mockUploadFromUrl.mockResolvedValue({
+      mockIngestAttachment.mockResolvedValue({
         fileId: 'file-img',
+        isImage: true,
+        isVideo: false,
         key: 'files/test-user-id/xxx/screenshot.jpg',
-        url: 'https://app.lobehub.com/f/file-img',
+        resolvedUrl: 'https://s3.example.com/files/test-user-id/xxx/screenshot.jpg',
       });
 
       await service.execAgent({
@@ -205,17 +234,65 @@ describe('AiAgentService.execAgent - file upload handling', () => {
         {
           alt: 'screenshot.jpg',
           id: 'file-img',
-          url: 'https://app.lobehub.com/f/file-img',
+          url: 'https://s3.example.com/files/test-user-id/xxx/screenshot.jpg',
         },
       ]);
     });
 
-    it('should not include imageList for non-image files', async () => {
-      mockUploadFromUrl.mockResolvedValue({
-        fileId: 'file-pdf',
-        key: 'files/test-user-id/xxx/doc.pdf',
-        url: 'https://app.lobehub.com/f/file-pdf',
+    it('should route videos to videoList instead of fileList', async () => {
+      mockIngestAttachment.mockResolvedValue({
+        fileId: 'file-vid',
+        isImage: false,
+        isVideo: true,
+        key: 'files/test-user-id/xxx/clip.mp4',
+        resolvedUrl: 'https://s3.example.com/files/test-user-id/xxx/clip.mp4',
       });
+
+      await service.execAgent({
+        agentId: 'agent-1',
+        files: [
+          {
+            mimeType: 'video/mp4',
+            name: 'clip.mp4',
+            size: 67_890,
+            url: 'https://cdn.discordapp.com/attachments/123/456/clip.mp4',
+          },
+        ],
+        prompt: 'Describe this video',
+      });
+
+      // parseFile must NOT be invoked for videos — there is no document content
+      // to extract, only the URL gets passed to video-capable models.
+      expect(mockParseFile).not.toHaveBeenCalled();
+
+      const createOpArgs = mockCreateOperation.mock.calls[0][0];
+      const lastMessage = createOpArgs.initialMessages.at(-1);
+
+      // Video should land in videoList, not imageList or fileList
+      expect(lastMessage.imageList).toBeUndefined();
+      expect(lastMessage.fileList).toBeUndefined();
+      expect(lastMessage.videoList).toEqual([
+        {
+          alt: 'clip.mp4',
+          id: 'file-vid',
+          url: 'https://s3.example.com/files/test-user-id/xxx/clip.mp4',
+        },
+      ]);
+
+      // The fileId is still tracked on the user message record
+      const userMessageCall = mockMessageCreate.mock.calls.find((call) => call[0].role === 'user');
+      expect(userMessageCall![0].files).toEqual(['file-vid']);
+    });
+
+    it('should parse non-image files and surface them via fileList for the LLM', async () => {
+      mockIngestAttachment.mockResolvedValue({
+        fileId: 'file-pdf',
+        isImage: false,
+        isVideo: false,
+        key: 'files/test-user-id/xxx/doc.pdf',
+        resolvedUrl: '',
+      });
+      mockParseFile.mockResolvedValue({ content: 'parsed pdf body text' });
 
       await service.execAgent({
         agentId: 'agent-1',
@@ -223,16 +300,72 @@ describe('AiAgentService.execAgent - file upload handling', () => {
           {
             mimeType: 'application/pdf',
             name: 'doc.pdf',
+            size: 4096,
             url: 'https://cdn.discordapp.com/attachments/123/456/doc.pdf',
           },
         ],
         prompt: 'Summarize this document',
       });
 
+      // DocumentService.parseFile must be invoked so the documents table is
+      // populated and history queries can resurface the same content later.
+      expect(mockParseFile).toHaveBeenCalledWith('file-pdf');
+
       const createOpArgs = mockCreateOperation.mock.calls[0][0];
       const lastMessage = createOpArgs.initialMessages.at(-1);
 
+      // imageList stays undefined for a non-image file …
       expect(lastMessage.imageList).toBeUndefined();
+      // … but fileList is now populated so MessageContentProcessor can inject
+      // the parsed content via filesPrompts() XML.
+      expect(lastMessage.fileList).toEqual([
+        {
+          content: 'parsed pdf body text',
+          fileType: 'application/pdf',
+          id: 'file-pdf',
+          name: 'doc.pdf',
+          size: 4096,
+          url: '',
+        },
+      ]);
+    });
+
+    it('continues with empty content when parseFile fails (e.g. binary file)', async () => {
+      mockIngestAttachment.mockResolvedValue({
+        fileId: 'file-bin',
+        isImage: false,
+        isVideo: false,
+        key: 'files/test-user-id/xxx/blob.bin',
+        resolvedUrl: '',
+      });
+      mockParseFile.mockRejectedValue(new Error('unsupported binary'));
+
+      await service.execAgent({
+        agentId: 'agent-1',
+        files: [
+          {
+            mimeType: 'application/octet-stream',
+            name: 'blob.bin',
+            size: 10,
+            url: 'https://cdn.example/blob.bin',
+          },
+        ],
+        prompt: 'What is in this?',
+      });
+
+      const createOpArgs = mockCreateOperation.mock.calls[0][0];
+      const lastMessage = createOpArgs.initialMessages.at(-1);
+
+      expect(lastMessage.fileList).toEqual([
+        {
+          content: undefined,
+          fileType: 'application/octet-stream',
+          id: 'file-bin',
+          name: 'blob.bin',
+          size: 10,
+          url: '',
+        },
+      ]);
     });
   });
 
@@ -243,7 +376,7 @@ describe('AiAgentService.execAgent - file upload handling', () => {
         prompt: 'Hello',
       });
 
-      expect(mockUploadFromUrl).not.toHaveBeenCalled();
+      expect(mockIngestAttachment).not.toHaveBeenCalled();
 
       const userMessageCall = mockMessageCreate.mock.calls.find((call) => call[0].role === 'user');
       expect(userMessageCall![0].files).toBeUndefined();
@@ -252,7 +385,7 @@ describe('AiAgentService.execAgent - file upload handling', () => {
 
   describe('when file upload fails', () => {
     it('should continue execution without the failed file', async () => {
-      mockUploadFromUrl.mockRejectedValue(new Error('Download failed'));
+      mockIngestAttachment.mockRejectedValue(new Error('Download failed'));
 
       await service.execAgent({
         agentId: 'agent-1',

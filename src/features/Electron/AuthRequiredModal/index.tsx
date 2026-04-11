@@ -7,7 +7,6 @@ import { AlertCircle, LogIn } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { getDesktopOnboardingCompleted } from '@/routes/(desktop)/desktop-onboarding/storage';
 import { useElectronStore } from '@/store/electron';
 
 interface AuthRequiredModalContentProps {
@@ -136,8 +135,12 @@ const AuthRequiredModal = memo(() => {
   const { open } = useAuthRequiredModal();
 
   useWatchBroadcast('authorizationRequired', () => {
-    if (useElectronStore.getState().isConnectionDrawerOpen) return;
-    if (!getDesktopOnboardingCompleted()) return;
+    const state = useElectronStore.getState();
+    if (state.isConnectionDrawerOpen) return;
+    // Wait until remote sync config has loaded once (avoid a flash before SWR resolves).
+    // Do not gate on `dataSyncConfig.active`: after sign-out `active` is false but 401 + X-Auth-Required
+    // still means the user must re-authenticate; gating on active would suppress the modal forever.
+    if (!state.isInitRemoteServerConfig) return;
 
     open();
   });

@@ -1,27 +1,39 @@
 import { type MenuProps } from '@lobehub/ui';
 import { Icon } from '@lobehub/ui';
 import { App } from 'antd';
-import { ExternalLink, LucideCopy, PanelTop, PencilLine, Trash, Wand2 } from 'lucide-react';
+import {
+  ExternalLink,
+  LucideCopy,
+  PanelTop,
+  PencilLine,
+  Share2,
+  Star,
+  Trash,
+  Wand2,
+} from 'lucide-react';
 import { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 
 import { isDesktop } from '@/const/version';
 import { pluginRegistry } from '@/features/Electron/titlebar/RecentlyViewed/plugins';
+import { openShareModal } from '@/features/ShareModal';
 import { useAgentStore } from '@/store/agent';
 import { useChatStore } from '@/store/chat';
 import { useElectronStore } from '@/store/electron';
 import { useGlobalStore } from '@/store/global';
 
 interface TopicItemDropdownMenuProps {
+  fav?: boolean;
   id?: string;
   toggleEditing: (visible?: boolean) => void;
 }
 
 export const useTopicItemDropdownMenu = ({
+  fav,
   id,
   toggleEditing,
-}: TopicItemDropdownMenuProps): (() => MenuProps['items']) => {
+}: TopicItemDropdownMenuProps) => {
   const { t } = useTranslation(['topic', 'common']);
   const { modal } = App.useApp();
   const navigate = useNavigate();
@@ -30,16 +42,33 @@ export const useTopicItemDropdownMenu = ({
   const activeAgentId = useAgentStore((s) => s.activeAgentId);
   const addTab = useElectronStore((s) => s.addTab);
 
-  const [autoRenameTopicTitle, duplicateTopic, removeTopic] = useChatStore((s) => [
+  const [autoRenameTopicTitle, duplicateTopic, removeTopic, favoriteTopic] = useChatStore((s) => [
     s.autoRenameTopicTitle,
     s.duplicateTopic,
     s.removeTopic,
+    s.favoriteTopic,
   ]);
+  const handleOpenShareModal = useCallback(() => {
+    if (!id) return;
 
-  return useCallback(() => {
+    openShareModal({ context: { threadId: null, topicId: id } });
+  }, [id]);
+
+  const dropdownMenu = useCallback(() => {
     if (!id) return [];
 
     return [
+      {
+        icon: <Icon icon={Star} />,
+        key: 'favorite',
+        label: fav ? t('actions.unfavorite') : t('actions.favorite'),
+        onClick: () => {
+          favoriteTopic(id, !fav);
+        },
+      },
+      {
+        type: 'divider' as const,
+      },
       {
         icon: <Icon icon={Wand2} />,
         key: 'autoRename',
@@ -83,15 +112,18 @@ export const useTopicItemDropdownMenu = ({
           ]
         : []),
       {
-        type: 'divider' as const,
-      },
-      {
         icon: <Icon icon={LucideCopy} />,
         key: 'duplicate',
         label: t('actions.duplicate'),
         onClick: () => {
           duplicateTopic(id);
         },
+      },
+      {
+        icon: <Icon icon={Share2} />,
+        key: 'share',
+        label: t('share', { ns: 'common' }),
+        onClick: handleOpenShareModal,
       },
       {
         type: 'divider' as const,
@@ -115,9 +147,11 @@ export const useTopicItemDropdownMenu = ({
     ].filter(Boolean) as MenuProps['items'];
   }, [
     id,
+    fav,
     activeAgentId,
     autoRenameTopicTitle,
     duplicateTopic,
+    favoriteTopic,
     removeTopic,
     openTopicInNewWindow,
     addTab,
@@ -125,5 +159,7 @@ export const useTopicItemDropdownMenu = ({
     toggleEditing,
     t,
     modal,
+    handleOpenShareModal,
   ]);
+  return { dropdownMenu };
 };

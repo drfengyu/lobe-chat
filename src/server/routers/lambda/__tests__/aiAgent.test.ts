@@ -1,6 +1,13 @@
 // @vitest-environment node
 import { type LobeChatDatabase } from '@lobechat/database';
-import { agents, agentsToSessions, sessions, threads, topics } from '@lobechat/database/schemas';
+import {
+  agents,
+  agentsToSessions,
+  messages,
+  sessions,
+  threads,
+  topics,
+} from '@lobechat/database/schemas';
 import { getTestDB } from '@lobechat/database/test-utils';
 import { eq } from 'drizzle-orm';
 import type * as ModelBankModule from 'model-bank';
@@ -43,6 +50,13 @@ vi.mock('@/server/modules/Mecha', () => ({
 vi.mock('@/server/services/aiChat', () => ({
   AiChatService: vi.fn().mockImplementation(() => ({
     getMessagesAndTopics: vi.fn().mockResolvedValue({ messages: [], topics: [] }),
+  })),
+}));
+
+// Mock FileService to avoid S3 dependency
+vi.mock('@/server/services/file', () => ({
+  FileService: vi.fn().mockImplementation(() => ({
+    getFullFileUrl: vi.fn((path: string | null) => path),
   })),
 }));
 
@@ -156,6 +170,62 @@ describe('AI Agent Router Integration Tests', () => {
       // Title should be first 50 characters + '...'
       expect(createdTopics[0].title).toBe(longPrompt.slice(0, 50) + '...');
       expect(createdTopics[0].title!.length).toBeLessThanOrEqual(53); // 50 + '...'
+    });
+
+    it('should persist boundDeviceId when creating a topic with deviceId', async () => {
+      const caller = aiAgentRouter.createCaller(createTestContext());
+
+      const result = await caller.execAgent({
+        agentId: testAgentId,
+        deviceId: 'device-local-1',
+        prompt: 'Hello, device!',
+      });
+
+      expect(result.success).toBe(true);
+
+      const createdTopics = await serverDB
+        .select()
+        .from(topics)
+        .where(eq(topics.agentId, testAgentId));
+
+      expect(createdTopics).toHaveLength(1);
+      expect(createdTopics[0].metadata).toEqual(
+        expect.objectContaining({ boundDeviceId: 'device-local-1' }),
+      );
+    });
+
+    it('should keep existing topic boundDeviceId when reusing a topic with deviceId', async () => {
+      const caller = aiAgentRouter.createCaller(createTestContext());
+
+      const [existingTopic] = await serverDB
+        .insert(topics)
+        .values({
+          title: 'Existing Topic',
+          agentId: testAgentId,
+          metadata: { boundDeviceId: 'device-old' },
+          sessionId: testSessionId,
+          userId,
+        })
+        .returning();
+
+      const result = await caller.execAgent({
+        agentId: testAgentId,
+        deviceId: 'device-new',
+        prompt: 'Follow up question',
+        appContext: {
+          topicId: existingTopic.id,
+        },
+      });
+
+      expect(result.success).toBe(true);
+
+      const updatedTopic = await serverDB.query.topics.findFirst({
+        where: eq(topics.id, existingTopic.id),
+      });
+
+      expect(updatedTopic?.metadata).toEqual(
+        expect.objectContaining({ boundDeviceId: 'device-old' }),
+      );
     });
 
     it('should reuse existing topic when topicId is provided', async () => {
@@ -309,6 +379,58 @@ describe('AI Agent Router Integration Tests', () => {
           }),
         }),
       );
+    });
+
+    it('should skip user message creation when parentMessageId is provided (regeneration)', async () => {
+      const caller = aiAgentRouter.createCaller(createTestContext());
+
+      // Create a topic and a user message to regenerate from
+      const [topic] = await serverDB
+        .insert(topics)
+        .values({
+          title: 'Regen Topic',
+          agentId: testAgentId,
+          sessionId: testSessionId,
+          userId,
+        })
+        .returning();
+
+      const [userMsg] = (await serverDB
+        .insert(messages)
+        .values({
+          role: 'user',
+          content: 'Original question',
+          userId,
+          agentId: testAgentId,
+          topicId: topic.id,
+        })
+        .returning()) as any[];
+
+      const result = await caller.execAgent({
+        agentId: testAgentId,
+        prompt: 'Original question',
+        parentMessageId: userMsg.id,
+        appContext: { topicId: topic.id },
+      });
+
+      expect(result.success).toBe(true);
+
+      // Verify only the assistant message was created (no new user message)
+      const allMessages = await serverDB
+        .select()
+        .from(messages)
+        .where(eq(messages.topicId, topic.id));
+
+      const userMessages = allMessages.filter((m) => m.role === 'user');
+      const assistantMessages = allMessages.filter((m) => m.role === 'assistant');
+
+      // Should still have only 1 user message (the original, no new one created)
+      expect(userMessages).toHaveLength(1);
+      expect(userMessages[0].id).toBe(userMsg.id);
+
+      // Should have 1 assistant message with parentId pointing to the user message
+      expect(assistantMessages).toHaveLength(1);
+      expect(assistantMessages[0].parentId).toBe(userMsg.id);
     });
   });
 });

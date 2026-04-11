@@ -1,5 +1,6 @@
 import { parseDataset } from '@lobechat/eval-dataset-parser';
 import { TRPCError } from '@trpc/server';
+import debug from 'debug';
 import { z } from 'zod';
 
 import {
@@ -33,16 +34,23 @@ const rubricTypeSchema = z.enum([
   'similar',
   'levenshtein',
   'rubric',
+  'external',
 ]);
 
 const evalConfigSchema = z.object({ judgePrompt: z.string().optional() }).passthrough();
 
 const evalRunInputConfigSchema = z.object({
   k: z.number().min(1).max(10).optional(),
-  maxConcurrency: z.number().min(1).max(10).optional(),
+  maxConcurrency: z.number().min(1).max(20).optional(),
   maxSteps: z.number().min(1).max(1000).optional(),
-  timeout: z.number().min(60_000).max(3_600_000).optional(),
+  timeout: z
+    .number()
+    .min(60_000)
+    .max(6 * 3_600_000)
+    .optional(),
 });
+
+const log = debug('lobe-lambda-router:agent-eval');
 
 const agentEvalProcedure = authedProcedure.use(serverDatabase).use(async (opts) => {
   const { ctx } = opts;
@@ -621,7 +629,9 @@ export const agentEvalRouter = router({
       z.object({
         benchmarkId: z.string().optional(),
         datasetId: z.string().optional(),
-        status: z.enum(['idle', 'pending', 'running', 'completed', 'failed', 'aborted']).optional(),
+        status: z
+          .enum(['idle', 'pending', 'running', 'completed', 'failed', 'aborted', 'external'])
+          .optional(),
         limit: z.number().min(1).max(100).default(50).optional(),
         offset: z.number().min(0).default(0).optional(),
       }),
@@ -802,6 +812,55 @@ export const agentEvalRouter = router({
       return { runId: input.runId, success: true, testCaseId: input.testCaseId };
     }),
 
+  resumeRunCase: agentEvalProcedure
+    .input(z.object({ runId: z.string(), testCaseId: z.string(), threadId: z.string().optional() }))
+    .mutation(async ({ input, ctx }) => {
+      log(
+        'resumeRunCase: runId=%s testCaseId=%s threadId=%s',
+        input.runId,
+        input.testCaseId,
+        input.threadId,
+      );
+      const result = await ctx.runService.resumeTrajectory({
+        runId: input.runId,
+        testCaseId: input.testCaseId,
+        threadId: input.threadId,
+      });
+      log('resumeRunCase: result %O', result);
+      return result;
+    }),
+
+  batchResumeRunCases: agentEvalProcedure
+    .input(
+      z.object({
+        runId: z.string(),
+        targets: z.array(z.object({ testCaseId: z.string(), threadId: z.string().optional() })),
+      }),
+    )
+    .mutation(async ({ input, ctx }) => {
+      log('batchResumeRunCases: runId=%s count=%d', input.runId, input.targets.length);
+      const results = await Promise.allSettled(
+        input.targets.map((target) =>
+          ctx.runService.resumeTrajectory({
+            runId: input.runId,
+            testCaseId: target.testCaseId,
+            threadId: target.threadId,
+          }),
+        ),
+      );
+      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+      const failed = results.filter((r) => r.status === 'rejected').length;
+      log('batchResumeRunCases: succeeded=%d failed=%d', succeeded, failed);
+      return { failed, succeeded, total: input.targets.length };
+    }),
+
+  getResumableCases: agentEvalProcedure
+    .input(z.object({ runId: z.string() }))
+    .query(async ({ input, ctx }) => {
+      log('getResumableCases: runId=%s', input.runId);
+      return ctx.runService.getResumableCases(input.runId);
+    }),
+
   /**
    * Get real-time progress of a running evaluation
    */
@@ -871,7 +930,15 @@ export const agentEvalRouter = router({
     .input(
       z.object({
         id: z.string(),
-        status: z.enum(['idle', 'pending', 'running', 'completed', 'failed', 'aborted']),
+        status: z.enum([
+          'idle',
+          'pending',
+          'running',
+          'completed',
+          'failed',
+          'aborted',
+          'external',
+        ]),
       }),
     )
     .mutation(async ({ input, ctx }) => {

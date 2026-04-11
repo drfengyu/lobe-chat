@@ -32,6 +32,10 @@ class ElectronSystemService {
     return this.ipc.windows.maximizeWindow();
   }
 
+  async isWindowMaximized(): Promise<boolean> {
+    return this.ipc.windows.isWindowMaximized();
+  }
+
   async minimizeWindow(): Promise<void> {
     return this.ipc.windows.minimizeWindow();
   }
@@ -52,6 +56,10 @@ class ElectronSystemService {
     return this.ipc.system.hasLegacyLocalDb();
   }
 
+  async runCliCommand(args: string): Promise<{ exitCode: number; stderr: string; stdout: string }> {
+    return this.ipc.cli.runCliCommand(args);
+  }
+
   showContextMenu = async (type: string, data?: any) => {
     return this.ipc.menu.showContextMenu({ data, type });
   };
@@ -62,7 +70,7 @@ class ElectronSystemService {
   async selectFolder(params?: {
     defaultPath?: string;
     title?: string;
-  }): Promise<string | undefined> {
+  }): Promise<{ path: string; repoType?: 'git' | 'github' } | undefined> {
     return this.ipc.system.selectFolder(params);
   }
 }

@@ -5,10 +5,9 @@ export const anthropicChatModels: AIChatModelCard[] = [
     abilities: {
       functionCall: true,
       reasoning: true,
-      search: true,
       vision: true,
     },
-    contextWindowTokens: 200_000,
+    contextWindowTokens: 1_000_000,
     description: "Claude Sonnet 4.6 is Anthropic's best combination of speed and intelligence.",
     displayName: 'Claude Sonnet 4.6',
     enabled: true,
@@ -32,13 +31,11 @@ export const anthropicChatModels: AIChatModelCard[] = [
     abilities: {
       functionCall: true,
       reasoning: true,
-      search: true,
       vision: true,
     },
     contextWindowTokens: 200_000,
     description: "Claude Sonnet 4.5 is Anthropic's most intelligent model to date.",
     displayName: 'Claude Sonnet 4.5',
-    enabled: true,
     id: 'claude-sonnet-4-5-20250929',
     maxOutput: 8192,
     pricing: {
@@ -59,7 +56,6 @@ export const anthropicChatModels: AIChatModelCard[] = [
     abilities: {
       functionCall: true,
       reasoning: true,
-      search: true,
       vision: true,
     },
     contextWindowTokens: 200_000,
@@ -91,41 +87,9 @@ export const anthropicChatModels: AIChatModelCard[] = [
     abilities: {
       functionCall: true,
       reasoning: true,
-      search: true,
       vision: true,
     },
-    contextWindowTokens: 200_000,
-    description:
-      "Claude Sonnet 3.7 is Anthropic's most intelligent model and the first hybrid reasoning model on the market, supporting near-instant responses or extended thinking with fine-grained control.",
-    displayName: 'Claude Sonnet 3.7',
-    id: 'claude-3-7-sonnet-20250219',
-    maxOutput: 8192,
-    pricing: {
-      units: [
-        { name: 'textInput', rate: 3, strategy: 'fixed', unit: 'millionTokens' },
-        { name: 'textOutput', rate: 15, strategy: 'fixed', unit: 'millionTokens' },
-        { name: 'textInput_cacheRead', rate: 0.3, strategy: 'fixed', unit: 'millionTokens' },
-        {
-          lookup: { prices: { '1h': 6, '5m': 3.75 }, pricingParams: ['ttl'] },
-          name: 'textInput_cacheWrite',
-          strategy: 'lookup',
-          unit: 'millionTokens',
-        },
-      ],
-    },
-    settings: {
-      extendParams: ['disableContextCaching', 'enableReasoning', 'reasoningBudgetToken'],
-    },
-    type: 'chat',
-  },
-  {
-    abilities: {
-      functionCall: true,
-      reasoning: true,
-      search: true,
-      vision: true,
-    },
-    contextWindowTokens: 200_000,
+    contextWindowTokens: 1_000_000,
     description:
       "Claude Opus 4.6 is Anthropic's most intelligent model for building agents and coding.",
     displayName: 'Claude Opus 4.6',
@@ -150,7 +114,6 @@ export const anthropicChatModels: AIChatModelCard[] = [
     abilities: {
       functionCall: true,
       reasoning: true,
-      search: true,
       structuredOutput: true,
       vision: true,
     },
@@ -158,7 +121,6 @@ export const anthropicChatModels: AIChatModelCard[] = [
     description:
       "Claude Opus 4.5 is Anthropic's flagship model, combining excellent intelligence and scalable performance for the highest-quality reasoning tasks.",
     displayName: 'Claude Opus 4.5',
-    enabled: true,
     id: 'claude-opus-4-5-20251101',
     maxOutput: 64_000,
     pricing: {
@@ -184,7 +146,6 @@ export const anthropicChatModels: AIChatModelCard[] = [
     abilities: {
       functionCall: true,
       reasoning: true,
-      search: true,
       vision: true,
     },
     contextWindowTokens: 200_000,
@@ -216,7 +177,6 @@ export const anthropicChatModels: AIChatModelCard[] = [
     abilities: {
       functionCall: true,
       reasoning: true,
-      search: true,
       vision: true,
     },
     contextWindowTokens: 200_000,
@@ -248,7 +208,6 @@ export const anthropicChatModels: AIChatModelCard[] = [
     abilities: {
       functionCall: true,
       reasoning: true,
-      search: true,
       structuredOutput: true,
       vision: true,
     },
@@ -275,36 +234,6 @@ export const anthropicChatModels: AIChatModelCard[] = [
     releasedAt: '2025-10-16',
     settings: {
       extendParams: ['disableContextCaching', 'enableReasoning', 'reasoningBudgetToken'],
-    },
-    type: 'chat',
-  },
-  {
-    abilities: {
-      functionCall: true,
-      vision: true,
-    },
-    contextWindowTokens: 200_000,
-    description:
-      "Claude 3.5 Haiku is Anthropic's fastest next-gen model, improving across skills and surpassing the previous flagship Claude 3 Opus on many benchmarks.",
-    displayName: 'Claude 3.5 Haiku',
-    id: 'claude-3-5-haiku-20241022',
-    maxOutput: 8192,
-    pricing: {
-      units: [
-        { name: 'textInput_cacheRead', rate: 0.08, strategy: 'fixed', unit: 'millionTokens' },
-        { name: 'textInput', rate: 0.8, strategy: 'fixed', unit: 'millionTokens' },
-        { name: 'textOutput', rate: 4, strategy: 'fixed', unit: 'millionTokens' },
-        {
-          lookup: { prices: { '1h': 1.6, '5m': 1 }, pricingParams: ['ttl'] },
-          name: 'textInput_cacheWrite',
-          strategy: 'lookup',
-          unit: 'millionTokens',
-        },
-      ],
-    },
-    releasedAt: '2024-11-05',
-    settings: {
-      extendParams: ['disableContextCaching'],
     },
     type: 'chat',
   },

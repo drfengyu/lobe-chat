@@ -1,9 +1,12 @@
 import { DEFAULT_PROVIDER } from '@lobechat/business-const';
-import { DEFAULT_MODEL, DEFAUTT_AGENT_TTS_CONFIG } from '@lobechat/const';
+import { DEFAULT_MODEL, DEFAUTT_AGENT_TTS_CONFIG, isDesktop } from '@lobechat/const';
 import { type AgentBuilderContext } from '@lobechat/context-engine';
-import { type AgentMode, type LobeAgentTTSConfig, type LocalSystemConfig } from '@lobechat/types';
+import { type AgentMode, type LobeAgentTTSConfig, type RuntimeEnvConfig } from '@lobechat/types';
+
+import { globalAgentContextManager } from '@/helpers/GlobalAgentContextManager';
 
 import { type AgentStoreState } from '../initialState';
+import { getLocalAgentWorkingDirectory } from '../utils/localAgentWorkingDirectoryStorage';
 import { agentSelectors } from './selectors';
 
 /**
@@ -74,21 +77,26 @@ const getAgentEnableModeById =
   };
 
 /**
- * Get local system config by agentId
- * Now reads from chatConfig.localSystem
+ * Get runtime env config by agentId
+ * Now reads from chatConfig.runtimeEnv
  */
-const getAgentLocalSystemConfigById =
+const getAgentRuntimeEnvConfigById =
   (agentId: string) =>
-  (s: AgentStoreState): LocalSystemConfig | undefined =>
-    agentSelectors.getAgentConfigById(agentId)(s)?.chatConfig?.localSystem;
+  (s: AgentStoreState): RuntimeEnvConfig | undefined =>
+    agentSelectors.getAgentConfigById(agentId)(s)?.chatConfig?.runtimeEnv;
 
 /**
  * Get working directory by agentId
  */
 const getAgentWorkingDirectoryById =
   (agentId: string) =>
-  (s: AgentStoreState): string | undefined =>
-    getAgentLocalSystemConfigById(agentId)(s)?.workingDirectory;
+  (_s: AgentStoreState): string | undefined => {
+    if (!isDesktop) return;
+
+    return (
+      getLocalAgentWorkingDirectory(agentId) ?? globalAgentContextManager.getContext().homePath
+    );
+  };
 
 /**
  * Get agent builder context by agentId
@@ -128,7 +136,7 @@ export const agentByIdSelectors = {
   getAgentEnableModeById,
   getAgentFilesById,
   getAgentKnowledgeBasesById,
-  getAgentLocalSystemConfigById,
+  getAgentRuntimeEnvConfigById,
   getAgentModeById,
   getAgentModelById,
   getAgentModelProviderById,

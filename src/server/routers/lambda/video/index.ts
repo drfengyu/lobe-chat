@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 
 import debug from 'debug';
 import { and, eq } from 'drizzle-orm';
+import { after } from 'next/server';
 import { z } from 'zod';
 
 import { chargeAfterGenerate } from '@/business/server/video-generation/chargeAfterGenerate';
@@ -15,11 +16,13 @@ import {
   type NewGeneration,
   type NewGenerationBatch,
 } from '@/database/schemas';
+import { getServerDB } from '@/database/server';
 import { appEnv } from '@/envs/app';
 import { authedProcedure, router } from '@/libs/trpc/lambda';
-import { keyVaults, serverDatabase } from '@/libs/trpc/lambda/middleware';
+import { serverDatabase } from '@/libs/trpc/lambda/middleware';
 import { initModelRuntimeFromDB } from '@/server/modules/ModelRuntime';
 import { FileService } from '@/server/services/file';
+import { processBackgroundVideoPolling } from '@/server/services/generation/videoBackgroundPolling';
 import {
   AsyncTaskError,
   AsyncTaskErrorType,
@@ -29,19 +32,16 @@ import {
 
 const log = debug('lobe-video:lambda');
 
-const videoProcedure = authedProcedure
-  .use(keyVaults)
-  .use(serverDatabase)
-  .use(async (opts) => {
-    const { ctx } = opts;
+const videoProcedure = authedProcedure.use(serverDatabase).use(async (opts) => {
+  const { ctx } = opts;
 
-    return opts.next({
-      ctx: {
-        asyncTaskModel: new AsyncTaskModel(ctx.serverDB, ctx.userId),
-        fileService: new FileService(ctx.serverDB, ctx.userId),
-      },
-    });
+  return opts.next({
+    ctx: {
+      asyncTaskModel: new AsyncTaskModel(ctx.serverDB, ctx.userId),
+      fileService: new FileService(ctx.serverDB, ctx.userId),
+    },
   });
+});
 
 const createVideoInputSchema = z.object({
   generationTopicId: z.string(),
@@ -144,9 +144,10 @@ export const videoRouter = router({
 
     // Step 1: Atomically create all database records in a transaction
     const {
+      asyncTaskCreatedAt,
+      asyncTaskId,
       batch: createdBatch,
       generation: createdGeneration,
-      asyncTaskId,
     } = await serverDB.transaction(async (tx) => {
       log('Starting database transaction for video generation');
 
@@ -194,6 +195,7 @@ export const videoRouter = router({
         .where(and(eq(generations.id, generation.id), eq(generations.userId, userId)));
 
       return {
+        asyncTaskCreatedAt: asyncTask.createdAt,
         asyncTaskId: asyncTask.id,
         batch,
         generation,
@@ -218,11 +220,57 @@ export const videoRouter = router({
 
       log('Video task submitted successfully, inferenceId: %s', response?.inferenceId);
 
-      // Update asyncTask with inferenceId and set status to Processing
-      await asyncTaskModel.update(asyncTaskId, {
-        inferenceId: response?.inferenceId,
-        status: AsyncTaskStatus.Processing,
-      });
+      // Determine async strategy based on response:
+      // - useWebhook: provider registered a callback URL, wait for webhook
+      // - otherwise: use background polling to check status
+      const useWebhook = response && 'useWebhook' in response && response.useWebhook;
+
+      if (useWebhook) {
+        // Webhook-based provider (e.g. Volcengine): wait for callback
+        log('Webhook-based provider detected, waiting for callback');
+
+        await asyncTaskModel.update(asyncTaskId, {
+          inferenceId: response?.inferenceId,
+          status: AsyncTaskStatus.Processing,
+        });
+      } else if (response) {
+        // Polling-based provider (e.g. OpenAI Sora): use background polling
+        log(
+          'Polling-based provider detected (inferenceId only), using after() for background polling',
+        );
+
+        await asyncTaskModel.update(asyncTaskId, {
+          inferenceId: response.inferenceId,
+          status: AsyncTaskStatus.Processing,
+        });
+
+        after(async () => {
+          log('After() hook executing background video polling for task: %s', asyncTaskId);
+
+          try {
+            const db = await getServerDB();
+
+            await processBackgroundVideoPolling(db, {
+              asyncTaskCreatedAt,
+              asyncTaskId,
+              generationBatchId: createdBatch.id,
+              generationId: createdGeneration.id,
+              generationTopicId,
+              inferenceId: response.inferenceId,
+              model,
+              prechargeResult,
+              provider,
+              userId,
+            });
+
+            log('Background video polling completed for task: %s', asyncTaskId);
+          } catch (error) {
+            console.error('[video] Background polling failed:', error);
+          }
+        });
+
+        log('After() hook registered for background video polling: %s', asyncTaskId);
+      }
     } catch (e) {
       console.error('Failed to submit video generation task:', e);
 
@@ -263,7 +311,7 @@ export const videoRouter = router({
     return {
       data: {
         batch: createdBatch,
-        generations: [createdGeneration],
+        generations: [{ ...createdGeneration, asyncTaskId }],
       },
       success: true,
     };

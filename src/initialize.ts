@@ -3,10 +3,12 @@ import isToday from 'dayjs/plugin/isToday';
 import isYesterday from 'dayjs/plugin/isYesterday';
 import relativeTime from 'dayjs/plugin/relativeTime';
 import utc from 'dayjs/plugin/utc';
-import { enableMapSet } from 'immer';
+import { enableMapSet, enablePatches } from 'immer';
+import { scan } from 'react-scan';
 
 import { isChunkLoadError, notifyChunkError } from '@/utils/chunkError';
 
+enablePatches();
 enableMapSet();
 
 // Dayjs plugins - extend once at app init to avoid duplicate extensions in components
@@ -28,4 +30,8 @@ if (typeof window !== 'undefined') {
       notifyChunkError();
     }
   });
+}
+
+if (__DEV__) {
+  scan({ enabled: true });
 }

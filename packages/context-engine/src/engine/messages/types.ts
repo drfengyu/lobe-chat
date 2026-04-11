@@ -1,20 +1,30 @@
 /* eslint-disable perfectionist/sort-interfaces */
 import type { FileContent, KnowledgeBaseInfo, PageContentContext } from '@lobechat/prompts';
-import type { RuntimeInitialContext, RuntimeStepContext } from '@lobechat/types';
+import type {
+  RuntimeInitialContext,
+  RuntimeSelectedSkill,
+  RuntimeSelectedTool,
+  RuntimeStepContext,
+} from '@lobechat/types';
 
 import type { OpenAIChatMessage, UIChatMessage } from '@/types/index';
 
 import type { AgentInfo } from '../../processors/GroupRoleTransform';
 import type { AgentBuilderContext } from '../../providers/AgentBuilderContextInjector';
+import type { AgentContextDocument } from '../../providers/AgentDocumentInjector';
 import type { AgentManagementContext } from '../../providers/AgentManagementContextInjector';
+import type { BotPlatformContext } from '../../providers/BotPlatformContextInjector';
 import type { DiscordContext } from '../../providers/DiscordContextProvider';
 import type { EvalContext } from '../../providers/EvalContextSystemInjector';
 import type { GroupAgentBuilderContext } from '../../providers/GroupAgentBuilderContextInjector';
 import type { GroupMemberInfo } from '../../providers/GroupContextInjector';
 import type { GTDPlan } from '../../providers/GTDPlanInjector';
 import type { GTDTodoList } from '../../providers/GTDTodoInjector';
+import type { OnboardingContext } from '../../providers/OnboardingContextInjector';
 import type { SkillMeta } from '../../providers/SkillContextProvider';
 import type { ToolDiscoveryMeta } from '../../providers/ToolDiscoveryProvider';
+import type { TopicReferenceItem } from '../../providers/TopicReferenceContextInjector';
+import type { PipelineContextMetadata } from '../../types';
 import type { LobeToolManifest } from '../tools/types';
 
 /**
@@ -207,6 +217,8 @@ export interface MessagesEngineParams {
   // ========== System date ==========
   /** Whether to inject current date into system message (default: true) */
   enableSystemDate?: boolean;
+  /** User timezone for system date formatting (e.g. 'Asia/Shanghai') */
+  timezone?: string | null;
 
   // ========== Agent configuration ==========
   /** Whether to enable history message count limit */
@@ -233,10 +245,16 @@ export interface MessagesEngineParams {
   // ========== Knowledge ==========
   /** Knowledge configuration */
   knowledge?: KnowledgeConfig;
+  /** Agent document configuration for context injection */
+  agentDocuments?: AgentContextDocument[];
 
   // ========== Skills ==========
   /** Skills configuration */
   skillsConfig?: SkillsConfig;
+  /** Skills explicitly selected by the user for the current request */
+  selectedSkills?: RuntimeSelectedSkill[];
+  /** Tools explicitly selected by the user for the current request */
+  selectedTools?: RuntimeSelectedTool[];
 
   // ========== Tool Discovery ==========
   /** Tool Discovery configuration (available tools for dynamic activation) */
@@ -253,10 +271,14 @@ export interface MessagesEngineParams {
   // ========== Extended contexts (both frontend and backend) ==========
   /** Agent Builder context */
   agentBuilderContext?: AgentBuilderContext;
+  /** Bot platform context for injecting platform capabilities (e.g. markdown support) */
+  botPlatformContext?: BotPlatformContext;
   /** Discord context for injecting channel/guild info into system injection message */
   discordContext?: DiscordContext;
   /** Eval context for injecting environment prompts into system message */
   evalContext?: EvalContext;
+  /** Onboarding context for injecting phase guidance and documents */
+  onboardingContext?: OnboardingContext;
   /** Agent Management context */
   agentManagementContext?: AgentManagementContext;
   /** Agent group configuration for multi-agent scenarios */
@@ -271,6 +293,10 @@ export interface MessagesEngineParams {
   };
   /** User memory configuration */
   userMemory?: UserMemoryConfig;
+
+  // ========== Topic References ==========
+  /** Topic reference summaries to inject into last user message */
+  topicReferences?: TopicReferenceItem[];
 
   // ========== Page Editor context ==========
   /**
@@ -297,7 +323,7 @@ export interface MessagesEngineResult {
   /** Processed messages in OpenAI format */
   messages: OpenAIChatMessage[];
   /** Processing metadata */
-  metadata: Record<string, any>;
+  metadata: PipelineContextMetadata;
   /** Processing statistics */
   stats: {
     /** Number of processors executed */
@@ -314,6 +340,7 @@ export interface MessagesEngineResult {
 export { type AgentInfo } from '../../processors/GroupRoleTransform';
 export { type AgentBuilderContext } from '../../providers/AgentBuilderContextInjector';
 export { type AgentManagementContext } from '../../providers/AgentManagementContextInjector';
+export { type BotPlatformContext } from '../../providers/BotPlatformContextInjector';
 export { type DiscordContext } from '../../providers/DiscordContextProvider';
 export { type EvalContext } from '../../providers/EvalContextSystemInjector';
 export { type GroupAgentBuilderContext } from '../../providers/GroupAgentBuilderContextInjector';
@@ -321,5 +348,6 @@ export { type GTDPlan } from '../../providers/GTDPlanInjector';
 export { type GTDTodoItem, type GTDTodoList } from '../../providers/GTDTodoInjector';
 export { type SkillMeta } from '../../providers/SkillContextProvider';
 export { type ToolDiscoveryMeta } from '../../providers/ToolDiscoveryProvider';
+export { type TopicReferenceItem } from '../../providers/TopicReferenceContextInjector';
 export { type OpenAIChatMessage, type UIChatMessage } from '@/types/index';
 export { type FileContent, type KnowledgeBaseInfo } from '@lobechat/prompts';

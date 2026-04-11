@@ -36,6 +36,7 @@ vi.mock('@/database/models/agent', () => ({
       provider: 'openai',
       systemRole: 'You are a helpful assistant',
     }),
+    queryAgents: vi.fn().mockResolvedValue([]),
   })),
 }));
 
@@ -66,6 +67,8 @@ vi.mock('@/database/models/plugin', () => ({
 vi.mock('@/database/models/topic', () => ({
   TopicModel: vi.fn().mockImplementation(() => ({
     create: vi.fn().mockResolvedValue({ id: 'topic-1' }),
+    findById: vi.fn().mockResolvedValue(undefined),
+    updateMetadata: vi.fn().mockResolvedValue(undefined),
   })),
 }));
 
@@ -104,6 +107,13 @@ vi.mock('@/server/services/klavis', () => ({
   })),
 }));
 
+// Mock FileService
+vi.mock('@/server/services/file', () => ({
+  FileService: vi.fn().mockImplementation(() => ({
+    uploadFromUrl: vi.fn(),
+  })),
+}));
+
 // Mock Mecha modules
 vi.mock('@/server/modules/Mecha', () => ({
   createServerAgentToolsEngine: vi.fn().mockReturnValue({
@@ -111,6 +121,14 @@ vi.mock('@/server/modules/Mecha', () => ({
     getEnabledPluginManifests: vi.fn().mockReturnValue(new Map()),
   }),
   serverMessagesEngine: vi.fn().mockResolvedValue([{ content: 'test', role: 'user' }]),
+}));
+
+// Mock deviceProxy
+vi.mock('@/server/services/toolExecution/deviceProxy', () => ({
+  deviceProxy: {
+    isConfigured: false,
+    queryDeviceList: vi.fn().mockResolvedValue([]),
+  },
 }));
 
 // Mock model-bank

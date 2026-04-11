@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
 
   // Parse body after verification
   const body = JSON.parse(rawBody);
+  const externalRetryCount = Number(request.headers.get('Upstash-Retried') ?? 0) || 0;
   try {
     const {
       operationId,
@@ -56,6 +57,7 @@ export async function POST(request: NextRequest) {
     const result = await agentRuntimeService.executeStep({
       approvedToolCall,
       context,
+      externalRetryCount,
       humanInput,
       operationId,
       rejectionReason,
@@ -70,7 +72,7 @@ export async function POST(request: NextRequest) {
         {
           status: 429,
           headers: {
-            'Retry-After': '37', // 单位：秒
+            'Retry-After': '37', // unit: seconds
           },
         },
       );

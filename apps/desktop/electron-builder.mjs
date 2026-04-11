@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -89,8 +90,8 @@ const protocolScheme = getProtocolScheme();
 
 // Determine icon file based on version type
 const getIconFileName = () => {
-  if (isStable) return 'Icon';
-  // nightly, canary share pre-release icon
+  if (isStable || isCanary) return 'Icon';
+  // nightly uses pre-release icon
   return 'Icon-nightly';
 };
 
@@ -105,6 +106,29 @@ const config = {
    */
   beforePack: async () => {
     await copyNativeModulesToSource();
+
+    console.info('📦 Downloading agent-browser binary...');
+    execSync('node scripts/download-agent-browser.mjs', { stdio: 'inherit', cwd: __dirname });
+
+    // Build and copy CLI bundle for embedding
+    console.info('📦 Building CLI for embedding...');
+    execSync('npm run build', { stdio: 'inherit', cwd: path.resolve(__dirname, '../cli') });
+    const cliSrc = path.resolve(__dirname, '../cli/dist/index.js');
+    const cliDest = path.resolve(__dirname, 'resources/bin/lobe-cli.js');
+    await fs.copyFile(cliSrc, cliDest);
+
+    // Write a minimal package.json next to the CLI bundle so that
+    // createRequire('../package.json') resolves correctly in the packaged app.
+    // The CLI script lives at Resources/bin/lobe-cli.js, so '../package.json'
+    // resolves to Resources/package.json.
+    const cliPkg = JSON.parse(
+      await fs.readFile(path.resolve(__dirname, '../cli/package.json'), 'utf8'),
+    );
+    await fs.writeFile(
+      path.resolve(__dirname, 'resources/cli-package.json'),
+      JSON.stringify({ name: cliPkg.name, type: 'module', version: cliPkg.version }),
+    );
+    console.info('✅ CLI bundle copied to resources/bin/lobe-cli.js');
   },
   /**
    * AfterPack hook for post-processing:
@@ -291,6 +315,11 @@ const config = {
   releaseInfo: {
     releaseNotes: process.env.RELEASE_NOTES || undefined,
   },
+
+  extraResources: [
+    { from: 'resources/bin', to: 'bin' },
+    { from: 'resources/cli-package.json', to: 'package.json' },
+  ],
 
   win: {
     executableName: 'LobeHub',

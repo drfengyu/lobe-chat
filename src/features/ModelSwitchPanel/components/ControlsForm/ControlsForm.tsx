@@ -11,18 +11,22 @@ import { useAgentStore } from '@/store/agent';
 import { agentByIdSelectors, chatConfigByIdSelectors } from '@/store/agent/selectors';
 import { aiModelSelectors, useAiInfraStore } from '@/store/aiInfra';
 
+import CodexMaxReasoningEffortSlider from './CodexMaxReasoningEffortSlider';
 import ContextCachingSwitch from './ContextCachingSwitch';
 import EffortSlider from './EffortSlider';
 import GPT5ReasoningEffortSlider from './GPT5ReasoningEffortSlider';
 import GPT51ReasoningEffortSlider from './GPT51ReasoningEffortSlider';
 import GPT52ProReasoningEffortSlider from './GPT52ProReasoningEffortSlider';
 import GPT52ReasoningEffortSlider from './GPT52ReasoningEffortSlider';
+import Grok420ReasoningEffortSlider from './Grok420ReasoningEffortSlider';
 import ImageAspectRatio2Select from './ImageAspectRatio2Select';
 import ImageAspectRatioSelect from './ImageAspectRatioSelect';
 import ImageResolution2Slider from './ImageResolution2Slider';
 import ImageResolutionSlider from './ImageResolutionSlider';
 import ReasoningEffortSlider from './ReasoningEffortSlider';
 import ReasoningTokenSlider from './ReasoningTokenSlider';
+import ReasoningTokenSlider32k from './ReasoningTokenSlider32k';
+import ReasoningTokenSlider80k from './ReasoningTokenSlider80k';
 import TextVerbositySlider from './TextVerbositySlider';
 import ThinkingBudgetSlider from './ThinkingBudgetSlider';
 import ThinkingLevel2Slider from './ThinkingLevel2Slider';
@@ -136,6 +140,26 @@ const ControlsForm = memo<ControlsFormProps>(({ model: modelProp, provider: prov
         paddingBottom: 0,
       },
     },
+    modelExtendParams?.includes('reasoningBudgetToken32k') && {
+      children: <ReasoningTokenSlider32k />,
+      label: t('extendParams.reasoningBudgetToken.title'),
+      layout: 'vertical',
+      minWidth: undefined,
+      name: 'reasoningBudgetToken32k',
+      style: {
+        paddingBottom: 0,
+      },
+    },
+    modelExtendParams?.includes('reasoningBudgetToken80k') && {
+      children: <ReasoningTokenSlider80k />,
+      label: t('extendParams.reasoningBudgetToken.title'),
+      layout: 'vertical',
+      minWidth: undefined,
+      name: 'reasoningBudgetToken80k',
+      style: {
+        paddingBottom: 0,
+      },
+    },
     {
       children: <ReasoningEffortSlider />,
       desc: 'reasoning_effort',
@@ -202,6 +226,28 @@ const ControlsForm = memo<ControlsFormProps>(({ model: modelProp, provider: prov
       layout: 'horizontal',
       minWidth: undefined,
       name: 'gpt5_2ProReasoningEffort',
+      style: {
+        paddingBottom: 0,
+      },
+    },
+    {
+      children: <Grok420ReasoningEffortSlider />,
+      desc: 'reasoning_effort',
+      label: t('extendParams.reasoningEffort.title'),
+      layout: 'horizontal',
+      minWidth: undefined,
+      name: 'grok4_20ReasoningEffort',
+      style: {
+        paddingBottom: 0,
+      },
+    },
+    {
+      children: <CodexMaxReasoningEffortSlider />,
+      desc: 'reasoning_effort',
+      label: t('extendParams.reasoningEffort.title'),
+      layout: 'horizontal',
+      minWidth: undefined,
+      name: 'codexMaxReasoningEffort',
       style: {
         paddingBottom: 0,
       },

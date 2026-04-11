@@ -102,6 +102,15 @@ export interface WriteLocalFileParams {
   path: string;
 }
 
+export interface AuditSafePathsParams {
+  paths: string[];
+  resolveAgainstScope: string;
+}
+
+export interface AuditSafePathsResult {
+  allSafe: boolean;
+}
+
 export interface LocalReadFileResult {
   /**
    * Character count of the content within the specified `loc` range.
@@ -173,7 +182,10 @@ export interface OpenLocalFolderParams {
 // Shell command types
 export interface RunCommandParams {
   command: string;
+  cwd?: string;
   description?: string;
+  /** Merged into the child process environment (after `process.env`). */
+  env?: Record<string, string>;
   run_in_background?: boolean;
   timeout?: number;
 }
@@ -340,4 +352,29 @@ export interface ShowSaveDialogResult {
    * The selected file path (undefined if cancelled)
    */
   filePath?: string;
+}
+
+export interface PrepareSkillDirectoryParams {
+  forceRefresh?: boolean;
+  url: string;
+  zipHash: string;
+}
+
+export interface PrepareSkillDirectoryResult {
+  error?: string;
+  extractedDir: string;
+  success: boolean;
+  zipPath: string;
+}
+
+export interface ResolveSkillResourcePathParams {
+  path: string;
+  url: string;
+  zipHash: string;
+}
+
+export interface ResolveSkillResourcePathResult {
+  error?: string;
+  fullPath?: string;
+  success: boolean;
 }

@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { AgentRuntimeService } from '../AgentRuntimeService';
+import { hookDispatcher } from '../hooks';
 
 // Mock all heavy dependencies to isolate executeStep logic
 vi.mock('@/envs/app', () => ({ appEnv: { APP_URL: 'http://localhost:3010' } }));
@@ -29,9 +30,6 @@ vi.mock('@/server/modules/AgentRuntime/RuntimeExecutors', () => ({
   createRuntimeExecutors: vi.fn(() => ({})),
 }));
 vi.mock('@/server/services/mcp', () => ({ mcpService: {} }));
-vi.mock('@/server/services/pluginGateway', () => ({
-  PluginGatewayService: vi.fn().mockImplementation(() => ({})),
-}));
 vi.mock('@/server/services/queue', () => ({
   QueueService: vi.fn().mockImplementation(() => ({
     getImpl: vi.fn(() => ({})),
@@ -84,7 +82,7 @@ describe('AgentRuntimeService.executeStep - early exit on terminal state', () =>
     });
   }
 
-  it('should call onComplete callback when skipping interrupted operation', async () => {
+  it('should dispatch onComplete hook when skipping interrupted operation', async () => {
     const service = createService();
 
     const coordinator = (service as any).coordinator;
@@ -94,8 +92,7 @@ describe('AgentRuntimeService.executeStep - early exit on terminal state', () =>
       lastModified: new Date().toISOString(),
     });
 
-    const onComplete = vi.fn();
-    service.registerStepCallbacks('op-123', { onComplete });
+    const dispatchSpy = vi.spyOn(hookDispatcher, 'dispatch').mockResolvedValue(undefined);
 
     await service.executeStep({
       operationId: 'op-123',
@@ -103,14 +100,20 @@ describe('AgentRuntimeService.executeStep - early exit on terminal state', () =>
       context: { phase: 'user_input' } as any,
     });
 
-    expect(onComplete).toHaveBeenCalledWith({
-      finalState: expect.objectContaining({ status: 'interrupted' }),
-      operationId: 'op-123',
-      reason: 'interrupted',
-    });
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      'op-123',
+      'onComplete',
+      expect.objectContaining({
+        operationId: 'op-123',
+        reason: 'interrupted',
+      }),
+      undefined,
+    );
+
+    dispatchSpy.mockRestore();
   });
 
-  it('should call onComplete with reason "done" when skipping done operation', async () => {
+  it('should dispatch onComplete hook with reason "done" when skipping done operation', async () => {
     const service = createService();
 
     const coordinator = (service as any).coordinator;
@@ -120,8 +123,7 @@ describe('AgentRuntimeService.executeStep - early exit on terminal state', () =>
       lastModified: new Date().toISOString(),
     });
 
-    const onComplete = vi.fn();
-    service.registerStepCallbacks('op-456', { onComplete });
+    const dispatchSpy = vi.spyOn(hookDispatcher, 'dispatch').mockResolvedValue(undefined);
 
     await service.executeStep({
       operationId: 'op-456',
@@ -129,14 +131,20 @@ describe('AgentRuntimeService.executeStep - early exit on terminal state', () =>
       context: { phase: 'user_input' } as any,
     });
 
-    expect(onComplete).toHaveBeenCalledWith({
-      finalState: expect.objectContaining({ status: 'done' }),
-      operationId: 'op-456',
-      reason: 'done',
-    });
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      'op-456',
+      'onComplete',
+      expect.objectContaining({
+        operationId: 'op-456',
+        reason: 'done',
+      }),
+      undefined,
+    );
+
+    dispatchSpy.mockRestore();
   });
 
-  it('should unregister callbacks after onComplete is called on early exit', async () => {
+  it('should unregister hooks after onComplete is dispatched on early exit', async () => {
     const service = createService();
 
     const coordinator = (service as any).coordinator;
@@ -146,8 +154,8 @@ describe('AgentRuntimeService.executeStep - early exit on terminal state', () =>
       lastModified: new Date().toISOString(),
     });
 
-    const onComplete = vi.fn();
-    service.registerStepCallbacks('op-789', { onComplete });
+    const dispatchSpy = vi.spyOn(hookDispatcher, 'dispatch').mockResolvedValue(undefined);
+    const unregisterSpy = vi.spyOn(hookDispatcher, 'unregister');
 
     await service.executeStep({
       operationId: 'op-789',
@@ -155,8 +163,11 @@ describe('AgentRuntimeService.executeStep - early exit on terminal state', () =>
       context: { phase: 'user_input' } as any,
     });
 
-    // Callbacks should be unregistered after onComplete
-    expect(service.getStepCallbacks('op-789')).toBeUndefined();
+    // Hooks should be unregistered after completion dispatch
+    expect(unregisterSpy).toHaveBeenCalledWith('op-789');
+
+    dispatchSpy.mockRestore();
+    unregisterSpy.mockRestore();
   });
 
   it('should NOT skip step when operation status is "running"', async () => {
@@ -295,5 +306,293 @@ describe('AgentRuntimeService.executeStep - step idempotency (distributed lock)'
     });
 
     expect(coordinator.tryClaimStep).toHaveBeenCalledWith('op-args', 42, 35);
+  });
+});
+
+describe('AgentRuntimeService.executeStep - Redis failure in error handler', () => {
+  const createService = () => {
+    const service = new AgentRuntimeService({} as any, 'user-1', { queueService: null });
+    return service;
+  };
+
+  it('should still dispatch onComplete hooks when Redis fails in catch block (ECONNRESET scenario)', async () => {
+    const service = createService();
+    const coordinator = (service as any).coordinator;
+    const streamManager = (service as any).streamManager;
+
+    coordinator.tryClaimStep = vi.fn().mockResolvedValue(true);
+
+    // First loadAgentState call succeeds (returns running state to enter step execution)
+    // Second call in catch block fails (Redis ECONNRESET)
+    let loadCallCount = 0;
+    coordinator.loadAgentState = vi.fn().mockImplementation(() => {
+      loadCallCount++;
+      if (loadCallCount === 1) {
+        return Promise.resolve({
+          status: 'running',
+          stepCount: 5,
+          lastModified: new Date().toISOString(),
+          metadata: {},
+        });
+      }
+      return Promise.reject(new Error('Reached the max retries per request limit (which is 3)'));
+    });
+
+    // publishStreamEvent: first call (step_start) succeeds, subsequent calls fail
+    // Simulates Redis going down mid-execution
+    let publishCallCount = 0;
+    streamManager.publishStreamEvent = vi.fn().mockImplementation(() => {
+      publishCallCount++;
+      if (publishCallCount === 1) return Promise.resolve();
+      return Promise.reject(new Error('Redis ECONNRESET'));
+    });
+
+    // saveAgentState fails (Redis is down)
+    coordinator.saveAgentState = vi.fn().mockRejectedValue(new Error('Redis ECONNRESET'));
+
+    const dispatchSpy = vi.spyOn(hookDispatcher, 'dispatch').mockResolvedValue(undefined);
+
+    // executeStep re-throws the original error after running hooks
+    await expect(
+      service.executeStep({
+        operationId: 'op-redis-fail',
+        stepIndex: 6,
+        context: { phase: 'user_input' } as any,
+      }),
+    ).rejects.toThrow();
+
+    // onComplete hooks MUST be dispatched even when Redis is completely down
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      'op-redis-fail',
+      'onComplete',
+      expect.objectContaining({
+        operationId: 'op-redis-fail',
+        reason: 'error',
+      }),
+      undefined,
+    );
+
+    dispatchSpy.mockRestore();
+  });
+
+  it('should still dispatch onError hooks when Redis fails in catch block', async () => {
+    const service = createService();
+    const coordinator = (service as any).coordinator;
+    const streamManager = (service as any).streamManager;
+
+    coordinator.tryClaimStep = vi.fn().mockResolvedValue(true);
+
+    let loadCallCount = 0;
+    coordinator.loadAgentState = vi.fn().mockImplementation(() => {
+      loadCallCount++;
+      if (loadCallCount === 1) {
+        return Promise.resolve({
+          status: 'running',
+          stepCount: 5,
+          lastModified: new Date().toISOString(),
+          metadata: {},
+        });
+      }
+      return Promise.reject(new Error('Redis ECONNRESET'));
+    });
+
+    // First publishStreamEvent call (step_start) succeeds, subsequent fail
+    let publishCallCount = 0;
+    streamManager.publishStreamEvent = vi.fn().mockImplementation(() => {
+      publishCallCount++;
+      if (publishCallCount === 1) return Promise.resolve();
+      return Promise.reject(new Error('Redis ECONNRESET'));
+    });
+
+    coordinator.saveAgentState = vi.fn().mockRejectedValue(new Error('Redis ECONNRESET'));
+
+    const dispatchSpy = vi.spyOn(hookDispatcher, 'dispatch').mockResolvedValue(undefined);
+
+    // executeStep re-throws the original error after running hooks
+    await expect(
+      service.executeStep({
+        operationId: 'op-redis-webhook',
+        stepIndex: 6,
+        context: { phase: 'user_input' } as any,
+      }),
+    ).rejects.toThrow();
+
+    // Both onComplete and onError hooks MUST be dispatched when reason is error
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      'op-redis-webhook',
+      'onError',
+      expect.objectContaining({
+        operationId: 'op-redis-webhook',
+        reason: 'error',
+      }),
+      undefined,
+    );
+
+    dispatchSpy.mockRestore();
+  });
+
+  it('should include stepCount in fallback error state when state reload fails', async () => {
+    const service = createService();
+    const coordinator = (service as any).coordinator;
+    const streamManager = (service as any).streamManager;
+
+    coordinator.tryClaimStep = vi.fn().mockResolvedValue(true);
+
+    let loadCallCount = 0;
+    coordinator.loadAgentState = vi.fn().mockImplementation(() => {
+      loadCallCount++;
+      if (loadCallCount === 1) {
+        return Promise.resolve({
+          status: 'running',
+          stepCount: 5,
+          lastModified: new Date().toISOString(),
+          metadata: {},
+        });
+      }
+      return Promise.reject(new Error('Redis ECONNRESET'));
+    });
+
+    let publishCallCount = 0;
+    streamManager.publishStreamEvent = vi.fn().mockImplementation(() => {
+      publishCallCount++;
+      if (publishCallCount === 1) return Promise.resolve();
+      return Promise.reject(new Error('Redis ECONNRESET'));
+    });
+
+    coordinator.saveAgentState = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      service.executeStep({
+        operationId: 'op-fallback-step-count',
+        stepIndex: 6,
+        context: { phase: 'user_input' } as any,
+      }),
+    ).rejects.toThrow();
+
+    expect(coordinator.saveAgentState).toHaveBeenCalledWith(
+      'op-fallback-step-count',
+      expect.objectContaining({
+        status: 'error',
+        stepCount: 6,
+      }),
+    );
+  });
+
+  it('should preserve stepCount when loadAgentState returns null in error handler', async () => {
+    const service = createService();
+    const coordinator = (service as any).coordinator;
+    const streamManager = (service as any).streamManager;
+
+    coordinator.tryClaimStep = vi.fn().mockResolvedValue(true);
+
+    let loadCallCount = 0;
+    coordinator.loadAgentState = vi.fn().mockImplementation(() => {
+      loadCallCount++;
+      if (loadCallCount === 1) {
+        return Promise.resolve({
+          status: 'running',
+          stepCount: 5,
+          lastModified: new Date().toISOString(),
+          metadata: {},
+        });
+      }
+      return Promise.resolve(null);
+    });
+
+    let publishCallCount = 0;
+    streamManager.publishStreamEvent = vi.fn().mockImplementation(() => {
+      publishCallCount++;
+      if (publishCallCount === 1) return Promise.resolve();
+      return Promise.reject(new Error('Redis ECONNRESET'));
+    });
+
+    coordinator.saveAgentState = vi.fn().mockResolvedValue(undefined);
+
+    await expect(
+      service.executeStep({
+        operationId: 'op-null-step-count',
+        stepIndex: 7,
+        context: { phase: 'user_input' } as any,
+      }),
+    ).rejects.toThrow();
+
+    expect(coordinator.saveAgentState).toHaveBeenCalledWith(
+      'op-null-step-count',
+      expect.objectContaining({
+        status: 'error',
+        stepCount: 7,
+      }),
+    );
+  });
+
+  it('should preserve loaded state metadata when only saveAgentState fails', async () => {
+    const service = createService();
+    const coordinator = (service as any).coordinator;
+    const streamManager = (service as any).streamManager;
+
+    coordinator.tryClaimStep = vi.fn().mockResolvedValue(true);
+
+    const stateWithHooks = {
+      status: 'running',
+      stepCount: 5,
+      lastModified: new Date().toISOString(),
+      metadata: {
+        _hooks: [
+          {
+            id: 'test-hook',
+            type: 'onComplete',
+            webhook: { url: 'https://example.com/webhook' },
+          },
+        ],
+      },
+    };
+
+    // loadAgentState always succeeds (returns state with hook metadata)
+    coordinator.loadAgentState = vi.fn().mockResolvedValue(stateWithHooks);
+
+    // saveAgentState fails (write-only Redis failure)
+    coordinator.saveAgentState = vi.fn().mockRejectedValue(new Error('Redis write failed'));
+
+    // publishStreamEvent: first call succeeds, subsequent fail
+    let publishCallCount = 0;
+    streamManager.publishStreamEvent = vi.fn().mockImplementation(() => {
+      publishCallCount++;
+      if (publishCallCount === 1) return Promise.resolve();
+      return Promise.reject(new Error('Redis ECONNRESET'));
+    });
+
+    const dispatchSpy = vi.spyOn(hookDispatcher, 'dispatch').mockResolvedValue(undefined);
+
+    await expect(
+      service.executeStep({
+        operationId: 'op-save-fail',
+        stepIndex: 6,
+        context: { phase: 'user_input' } as any,
+      }),
+    ).rejects.toThrow();
+
+    // onComplete hooks must be dispatched with the full state including metadata
+    expect(dispatchSpy).toHaveBeenCalledWith(
+      'op-save-fail',
+      'onComplete',
+      expect.objectContaining({
+        operationId: 'op-save-fail',
+        reason: 'error',
+        finalState: expect.objectContaining({
+          metadata: expect.objectContaining({
+            _hooks: expect.arrayContaining([
+              expect.objectContaining({
+                id: 'test-hook',
+                webhook: { url: 'https://example.com/webhook' },
+              }),
+            ]),
+          }),
+          status: 'error',
+        }),
+      }),
+      expect.anything(),
+    );
+
+    dispatchSpy.mockRestore();
   });
 });

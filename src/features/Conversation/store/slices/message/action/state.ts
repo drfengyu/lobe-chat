@@ -3,6 +3,8 @@ import { produce } from 'immer';
 import { type StateCreator } from 'zustand';
 
 import { messageService } from '@/services/message';
+import { useChatStore } from '@/store/chat';
+import { cleanSpeakerTag } from '@/store/chat/utils/cleanSpeakerTag';
 
 import { type Store as ConversationStore } from '../../../action';
 import { dataSelectors } from '../../data/selectors';
@@ -31,7 +33,11 @@ export interface MessageStateAction {
   /**
    * Modify message content (with optimistic update)
    */
-  modifyMessageContent: (id: string, content: string) => Promise<void>;
+  modifyMessageContent: (
+    id: string,
+    content: string,
+    editorData?: Record<string, any> | null,
+  ) => Promise<void>;
 
   /**
    * Toggle compressed group expanded state
@@ -62,6 +68,10 @@ export const messageStateSlice: StateCreator<
     const { context, replaceMessages } = get();
     if (!context.agentId || !context.topicId) return;
 
+    useChatStore
+      .getState()
+      .cancelOperations({ messageId: id, status: 'running' }, 'Compression cancelled');
+
     // Call service to cancel compression
     const { messages } = await messageService.cancelCompression({
       agentId: context.agentId,
@@ -78,7 +88,7 @@ export const messageStateSlice: StateCreator<
   copyMessage: async (id, content) => {
     const { hooks } = get();
 
-    await copyToClipboard(content);
+    await copyToClipboard(cleanSpeakerTag(content));
 
     // ===== Hook: onMessageCopied =====
     if (hooks.onMessageCopied) {
@@ -103,7 +113,7 @@ export const messageStateSlice: StateCreator<
     );
   },
 
-  modifyMessageContent: async (id, content) => {
+  modifyMessageContent: async (id, content, editorData) => {
     const { hooks } = get();
 
     // Get original content for hook
@@ -111,7 +121,7 @@ export const messageStateSlice: StateCreator<
     const originalContent = originalMessage?.content;
 
     // Update content
-    await get().updateMessageContent(id, content);
+    await get().updateMessageContent(id, content, editorData ? { editorData } : undefined);
 
     // ===== Hook: onMessageModified =====
     if (hooks.onMessageModified) {
